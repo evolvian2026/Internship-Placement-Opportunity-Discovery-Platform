@@ -1,0 +1,128 @@
+# ---------------------------------------------------------------------------
+# Full local stack: Postgres, Redis, API, background worker and the web app.
+#
+#   cp .env.docker.example .env
+#   docker compose up --build
+#   docker compose exec api npm run db:push && docker compose exec api npm run db:seed
+#   docker compose exec api npm run ingest
+# ---------------------------------------------------------------------------
+name: opportunity-discovery
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-opportunities}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-opportunities}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Persist the queue so a restart does not lose scheduled jobs.
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-opportunities}?schema=public
+      REDIS_URL: redis://redis:6379
+      QUEUE_ENABLED: 'true'
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:3000}
+      DATA_SOURCE: ${DATA_SOURCE:-mock}
+      INGESTION_ENABLED: ${INGESTION_ENABLED:-true}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_DIR: /app/apps/api/storage
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ASSISTANT_MODEL: ${ASSISTANT_MODEL:-claude-sonnet-5}
+    volumes:
+      - resume-storage:/app/apps/api/storage
+    ports:
+      - '${API_PORT:-4000}:4000'
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    # Same image as the API, different entrypoint: source connectors, the
+    # freshness sweep and notification digests run off the request path.
+    command: ['node', 'dist/apps/api/src/worker.js']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-opportunities}?schema=public
+      REDIS_URL: redis://redis:6379
+      QUEUE_ENABLED: 'true'
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:3000}
+      DATA_SOURCE: ${DATA_SOURCE:-mock}
+      INGESTION_ENABLED: 'true'
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_LOCAL_DIR: /app/apps/api/storage
+      SMTP_HOST: ${SMTP_HOST:-}
+      MAIL_FROM: ${MAIL_FROM:-Opportunity Discovery <no-reply@example.com>}
+    volumes:
+      - resume-storage:/app/apps/api/storage
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_started }
+    environment:
+      NODE_ENV: production
+      # Server components talk to the API over the compose network.
+      API_BASE_URL: http://api:4000
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+
+volumes:
+  postgres-data:
+  redis-data:
+  resume-storage:

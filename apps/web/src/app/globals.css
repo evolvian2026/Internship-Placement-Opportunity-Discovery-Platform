@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens.
+ *
+ * Light is the default; `.dark` on <html> swaps the palette. Every colour used
+ * anywhere in the app resolves through these variables, so the two themes can
+ * never drift apart.
+ */
+@layer base {
+  :root {
+    --bg: 248 250 252;
+    --surface: 255 255 255;
+    --surface-2: 241 245 249;
+    --border: 226 232 240;
+    --fg: 15 23 42;
+    --muted: 71 85 105;
+    --subtle: 148 163 184;
+
+    --brand: 29 78 216;
+    --brand-fg: 255 255 255;
+    --brand-soft: 219 234 254;
+
+    --success: 21 128 61;
+    --success-soft: 220 252 231;
+    --warning: 180 83 9;
+    --warning-soft: 254 243 199;
+    --danger: 185 28 28;
+    --danger-soft: 254 226 226;
+    --info: 3 105 161;
+    --info-soft: 224 242 254;
+  }
+
+  .dark {
+    --bg: 2 6 23;
+    --surface: 15 23 42;
+    --surface-2: 30 41 59;
+    --border: 51 65 85;
+    --fg: 241 245 249;
+    --muted: 148 163 184;
+    --subtle: 100 116 139;
+
+    --brand: 96 165 250;
+    --brand-fg: 8 15 35;
+    --brand-soft: 30 58 138;
+
+    --success: 74 222 128;
+    --success-soft: 6 59 33;
+    --warning: 251 191 36;
+    --warning-soft: 69 39 4;
+    --danger: 248 113 113;
+    --danger-soft: 69 10 10;
+    --info: 56 189 248;
+    --info-soft: 8 47 73;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Visible focus for keyboard users without a permanent outline on click. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-bg;
+  }
+
+  ::selection {
+    @apply bg-brand/20;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-border bg-surface;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg
+           placeholder:text-subtle focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/25;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-fg;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-surface-2;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-black/5 to-transparent;
+    animation: shimmer 1.6s infinite;
+  }
+
+  .dark .skeleton::after {
+    @apply via-white/5;
+  }
+
+  /* Long descriptions arriving from sources keep their line breaks. */
+  .prose-source {
+    @apply whitespace-pre-line text-sm leading-relaxed text-muted;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

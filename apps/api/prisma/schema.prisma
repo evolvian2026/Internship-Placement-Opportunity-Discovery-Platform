@@ -1,0 +1,945 @@
+// Off-Campus Internship & Placement Opportunity Discovery Platform
+// PostgreSQL schema.
+//
+// Conventions:
+//  - every table carries createdAt / updatedAt
+//  - soft deletion via `deletedAt` on the entities an admin can remove
+//  - enums mirror packages/shared/src/taxonomy.ts
+//  - industries/domains are *rows*, not enums, so admins can add new ones
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ------------------------------------------------------------------ *
+ * Enums
+ * ------------------------------------------------------------------ */
+
+enum UserRole {
+  STUDENT
+  ADMIN
+}
+
+enum Degree {
+  DIPLOMA
+  ITI
+  B_TECH
+  B_E
+  B_SC
+  B_COM
+  B_A
+  BCA
+  BBA
+  B_PHARM
+  MBBS
+  M_TECH
+  M_E
+  M_SC
+  M_COM
+  M_A
+  MCA
+  MBA
+  PGDM
+  PHD
+  OTHER
+}
+
+enum OpportunityType {
+  INTERNSHIP
+  FULL_TIME
+  PART_TIME
+  APPRENTICESHIP
+  TRAINEE
+  GRADUATE_PROGRAM
+  WALK_IN
+  OFF_CAMPUS_DRIVE
+  HIRING_CHALLENGE
+  GOVERNMENT_JOB
+  PSU_JOB
+  GOVERNMENT_INTERNSHIP
+  RESEARCH_OPPORTUNITY
+  FELLOWSHIP
+  CONTRACT
+}
+
+enum WorkMode {
+  REMOTE
+  ONSITE
+  HYBRID
+  NOT_SPECIFIED
+}
+
+enum OpportunityStatus {
+  VERIFIED
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  UNVERIFIED
+  REMOVED
+}
+
+enum ApplicationStatus {
+  SAVED
+  INTERESTED
+  APPLIED
+  ASSESSMENT
+  INTERVIEW
+  TECHNICAL_INTERVIEW
+  HR_INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+enum CompanyType {
+  STARTUP
+  MNC
+  PRODUCT
+  SERVICE
+  GOVERNMENT
+  PSU
+  NGO
+  RESEARCH_ORGANIZATION
+}
+
+enum SourceKind {
+  MOCK
+  RSS
+  JSON_API
+  GREENHOUSE
+  LEVER
+  GOVERNMENT_FEED
+  MANUAL
+}
+
+enum SourceTrustLevel {
+  OFFICIAL
+  PARTNER
+  THIRD_PARTY
+}
+
+enum IngestionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  WARNING
+  FAILED
+}
+
+enum ExperienceKind {
+  INTERNSHIP
+  JOB
+  PROJECT
+  FREELANCE
+}
+
+enum NotificationType {
+  NEW_MATCHES
+  DEADLINE_REMINDER
+  FOLLOWED_COMPANY
+  APPLICATION_FOLLOW_UP
+  GOVERNMENT_MATCH
+  SYSTEM
+}
+
+enum NotificationFrequency {
+  REALTIME
+  DAILY
+  WEEKLY
+  NEVER
+}
+
+enum RemotePreference {
+  REMOTE
+  ONSITE
+  HYBRID
+  ANY
+}
+
+enum OpportunityPreference {
+  INTERNSHIP
+  FULL_TIME
+  ANY
+}
+
+enum SectorPreference {
+  GOVERNMENT
+  PRIVATE
+  ANY
+}
+
+enum ResumeParseStatus {
+  PENDING
+  PARSED
+  FAILED
+}
+
+/* ------------------------------------------------------------------ *
+ * Users, auth & profile
+ * ------------------------------------------------------------------ */
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String?
+  googleId      String?   @unique
+  name          String
+  role          UserRole  @default(STUDENT)
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile                 UserProfile?
+  notificationPreferences NotificationPreference?
+  refreshTokens           RefreshToken[]
+  resumes                 Resume[]
+  applications            Application[]
+  savedOpportunities      SavedOpportunity[]
+  followedCompanies       FollowedCompany[]
+  notifications           Notification[]
+  conversations           AssistantConversation[]
+  skillGapAnalyses        SkillGapAnalysis[]
+  careerRecommendations   CareerRecommendation[]
+  matchScores             MatchScore[]
+
+  @@index([role])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model UserProfile {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  phone             String?
+  city              String?
+  state             String?
+  country           String?   @default("India")
+  headline          String?
+  dateOfBirth       DateTime?
+  yearsOfExperience Float     @default(0)
+  profileCompletion Int       @default(0)
+  /// Visibility control for requirement 47 (privacy).
+  isPublic          Boolean   @default(false)
+  activeResumeId    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  education   Education[]
+  skills      UserSkill[]
+  experience  Experience[]
+  preferences UserPreference?
+
+  @@index([city])
+  @@map("user_profiles")
+}
+
+model Education {
+  id             String   @id @default(uuid())
+  profileId      String
+  degree         Degree
+  branch         String?
+  university     String?
+  college        String?
+  graduationYear Int?
+  currentYear    Int?
+  cgpa           Float?
+  percentage     Float?
+  backlogs       Int?     @default(0)
+  isPrimary      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  profile UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@index([degree, graduationYear])
+  @@map("education")
+}
+
+/// Canonical skill catalogue. Seeded from packages/shared but extensible at
+/// runtime — an unknown skill typed by a user is inserted here on first use.
+model Skill {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  category  String?
+  createdAt DateTime @default(now())
+
+  users         UserSkill[]
+  opportunities OpportunitySkill[]
+
+  @@index([category])
+  @@map("skills")
+}
+
+model UserSkill {
+  id             String   @id @default(uuid())
+  profileId      String
+  skillId        String
+  /// 1..5 self-assessed; null when unknown (e.g. extracted from a resume).
+  proficiency    Int?
+  /// True when the skill came from resume extraction and is not yet confirmed.
+  isFromResume   Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  profile UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skill   Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, skillId])
+  @@index([skillId])
+  @@map("user_skills")
+}
+
+model Experience {
+  id           String         @id @default(uuid())
+  profileId    String
+  kind         ExperienceKind
+  title        String
+  organization String?
+  description  String?
+  startDate    DateTime?
+  endDate      DateTime?
+  isCurrent    Boolean        @default(false)
+  skills       String[]       @default([])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  profile UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("experience")
+}
+
+model UserPreference {
+  id                   String                @id @default(uuid())
+  profileId            String                @unique
+  desiredRoles         String[]              @default([])
+  desiredIndustries    String[]              @default([])
+  preferredLocations   String[]              @default([])
+  remotePreference     RemotePreference      @default(ANY)
+  minSalaryExpectation Int?
+  opportunityPreference OpportunityPreference @default(ANY)
+  sectorPreference     SectorPreference      @default(ANY)
+  willingToRelocate    Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  profile UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model Resume {
+  id             String            @id @default(uuid())
+  userId         String
+  fileName       String
+  storageKey     String
+  mimeType       String
+  sizeBytes      Int
+  parseStatus    ResumeParseStatus @default(PENDING)
+  parseError     String?
+  /// Raw extracted text, retained so the user can re-review extraction.
+  extractedText  String?
+  /// Structured extraction awaiting user confirmation.
+  extractedData  Json?
+  isActive       Boolean           @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("resumes")
+}
+
+/* ------------------------------------------------------------------ *
+ * Taxonomy (admin-extensible)
+ * ------------------------------------------------------------------ */
+
+model Industry {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  domains       Domain[]
+  opportunities Opportunity[]
+
+  @@map("industries")
+}
+
+model Domain {
+  id         String   @id @default(uuid())
+  industryId String
+  name       String
+  slug       String   @unique
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  industry      Industry      @relation(fields: [industryId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  @@unique([industryId, name])
+  @@index([industryId])
+  @@map("domains")
+}
+
+/* ------------------------------------------------------------------ *
+ * Companies
+ * ------------------------------------------------------------------ */
+
+model Company {
+  id            String       @id @default(uuid())
+  name          String
+  slug          String       @unique
+  /// Normalised name used for duplicate detection ("abc technologies pvt ltd"
+  /// and "ABC Technologies Private Limited" collapse to the same key).
+  normalizedName String      @unique
+  logoUrl       String?
+  website       String?
+  careerPageUrl String?
+  description   String?
+  industryName  String?
+  companyType   CompanyType?
+  headquarters  String?
+  employeeCount String?
+  isVerified    Boolean      @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  opportunities Opportunity[]
+  sources       CompanySource[]
+  followers     FollowedCompany[]
+
+  @@index([companyType])
+  @@index([industryName])
+  @@index([name])
+  @@map("companies")
+}
+
+model CompanySource {
+  id        String   @id @default(uuid())
+  companyId String
+  sourceId  String
+  /// Identifier of the company inside the external source (e.g. Greenhouse board token).
+  externalRef String
+  createdAt DateTime @default(now())
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  source  SourceConnector @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, externalRef])
+  @@index([companyId])
+  @@map("company_sources")
+}
+
+model FollowedCompany {
+  id        String   @id @default(uuid())
+  userId    String
+  companyId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@map("followed_companies")
+}
+
+/* ------------------------------------------------------------------ *
+ * Opportunities
+ * ------------------------------------------------------------------ */
+
+model Opportunity {
+  id               String            @id @default(uuid())
+  slug             String            @unique
+  title            String
+  /// Kept denormalised so government/PSU postings without a Company row still
+  /// render, and so search does not need a join for the common case.
+  organizationName String
+  companyId        String?
+  opportunityType  OpportunityType
+  industryId       String?
+  domainId         String?
+  role             String?
+  description      String            @default("")
+  responsibilities String[]          @default([])
+  requirements     String[]          @default([])
+  preferredSkills  String[]          @default([])
+  selectionProcess String[]          @default([])
+  requiredDocuments String[]         @default([])
+  workMode         WorkMode          @default(NOT_SPECIFIED)
+
+  salaryMin      Int?
+  salaryMax      Int?
+  salaryCurrency String  @default("INR")
+  /// e.g. "YEAR" | "MONTH" — null when the posting does not say.
+  salaryPeriod   String?
+  stipendMin     Int?
+  stipendMax     Int?
+  durationMonths Int?
+
+  applicationStartDate DateTime?
+  applicationDeadline  DateTime?
+  postedDate           DateTime?
+  examDate             DateTime?
+  vacancies            Int?
+  applicationFee       String?
+
+  applicationUrl String
+  status         OpportunityStatus @default(UNVERIFIED)
+  lastVerifiedAt DateTime?
+  /// Number of consecutive verification attempts that failed.
+  verifyFailures Int               @default(0)
+  tags           String[]          @default([])
+
+  // Module-specific attributes
+  governmentCategory String?
+  psuCategory        String?
+  internshipCategory String?
+  gateRequired       Boolean?
+  ppoAvailable       Boolean?
+
+  /// Safety signals from the fraud heuristics (never a definitive accusation).
+  fraudFlags  String[] @default([])
+  fraudScore  Int      @default(0)
+
+  /// Stable fingerprint used by duplicate detection.
+  dedupeHash String?
+  /// When this row was merged into another, points at the surviving row.
+  mergedIntoId String?
+
+  createdBy String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  company     Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  industry    Industry? @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  domain      Domain?   @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  mergedInto  Opportunity?  @relation("OpportunityMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  duplicates  Opportunity[] @relation("OpportunityMerge")
+
+  eligibility  OpportunityEligibility?
+  skills       OpportunitySkill[]
+  locations    OpportunityLocation[]
+  sources      OpportunitySource[]
+  applications Application[]
+  savedBy      SavedOpportunity[]
+  matchScores  MatchScore[]
+
+  @@index([status, applicationDeadline])
+  @@index([opportunityType, status])
+  @@index([companyId])
+  @@index([industryId])
+  @@index([domainId])
+  @@index([postedDate])
+  @@index([dedupeHash])
+  @@index([governmentCategory])
+  @@index([psuCategory])
+  @@index([createdAt])
+  @@map("opportunities")
+}
+
+model OpportunityEligibility {
+  id                 String   @id @default(uuid())
+  opportunityId      String   @unique
+  degrees            Degree[] @default([])
+  branches           String[] @default([])
+  graduationYears    Int[]    @default([])
+  minCgpa            Float?
+  minPercentage      Float?
+  maxBacklogs        Int?
+  minExperienceYears Float?
+  maxExperienceYears Float?
+  minAge             Int?
+  maxAge             Int?
+  /// Only populated when the official posting states it (requirement 7).
+  genderRequirement  String?
+  citizenship        String?
+  workAuthorization  String?
+  /// Verbatim eligibility text from the source, so nothing is invented.
+  rawText            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@map("opportunity_eligibility")
+}
+
+model OpportunitySkill {
+  id            String  @id @default(uuid())
+  opportunityId String
+  skillId       String
+  isRequired    Boolean @default(true)
+  weight        Float   @default(1)
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  skill       Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([opportunityId, skillId])
+  @@index([skillId])
+  @@map("opportunity_skills")
+}
+
+model OpportunityLocation {
+  id            String  @id @default(uuid())
+  opportunityId String
+  city          String?
+  state         String?
+  country       String? @default("India")
+  isRemote      Boolean @default(false)
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@index([opportunityId])
+  @@index([city])
+  @@index([state])
+  @@map("opportunity_locations")
+}
+
+/// One row per source that published a given opportunity. Duplicate detection
+/// merges opportunities and keeps every source ref, so the UI can say
+/// "Found on 3 sources" while linking Apply to the official one.
+model OpportunitySource {
+  id             String    @id @default(uuid())
+  opportunityId  String
+  sourceId       String
+  /// The source's own identifier for the posting, used for idempotent upserts.
+  externalId     String
+  sourceUrl      String
+  isPrimary      Boolean   @default(false)
+  lastSeenAt     DateTime  @default(now())
+  lastVerifiedAt DateTime?
+  rawPayload     Json?
+  createdAt      DateTime  @default(now())
+
+  opportunity Opportunity     @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  source      SourceConnector @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, externalId])
+  @@index([opportunityId])
+  @@map("opportunity_sources")
+}
+
+/* ------------------------------------------------------------------ *
+ * Ingestion
+ * ------------------------------------------------------------------ */
+
+model SourceConnector {
+  id                 String           @id @default(uuid())
+  name               String
+  slug               String           @unique
+  kind               SourceKind
+  trustLevel         SourceTrustLevel @default(THIRD_PARTY)
+  baseUrl            String?
+  /// Connector-specific settings (feed URL, board token, query params...).
+  config             Json             @default("{}")
+  enabled            Boolean          @default(true)
+  scheduleCron       String?
+  rateLimitPerMinute Int              @default(30)
+  respectsRobotsTxt  Boolean          @default(true)
+  /// Documented access policy for this source, recorded for compliance.
+  accessPolicyNote   String?
+  lastSyncAt         DateTime?
+  lastStatus         IngestionStatus?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  jobs          IngestionJob[]
+  opportunities OpportunitySource[]
+  companies     CompanySource[]
+
+  @@index([enabled])
+  @@map("source_connectors")
+}
+
+model IngestionJob {
+  id               String          @id @default(uuid())
+  sourceId         String
+  status           IngestionStatus @default(PENDING)
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  recordsFetched   Int             @default(0)
+  recordsCreated   Int             @default(0)
+  recordsUpdated   Int             @default(0)
+  recordsExpired   Int             @default(0)
+  recordsDuplicate Int             @default(0)
+  recordsFailed    Int             @default(0)
+  errorMessage     String?
+  triggeredBy      String?
+  createdAt        DateTime        @default(now())
+
+  source SourceConnector @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  logs   IngestionLog[]
+
+  @@index([sourceId, createdAt])
+  @@index([status])
+  @@map("ingestion_jobs")
+}
+
+model IngestionLog {
+  id         String   @id @default(uuid())
+  jobId      String
+  level      String   @default("info")
+  message    String
+  externalId String?
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  job IngestionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@map("ingestion_logs")
+}
+
+/* ------------------------------------------------------------------ *
+ * Tracking
+ * ------------------------------------------------------------------ */
+
+model SavedOpportunity {
+  id            String   @id @default(uuid())
+  userId        String
+  opportunityId String
+  note          String?
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, opportunityId])
+  @@index([opportunityId])
+  @@map("saved_opportunities")
+}
+
+model Application {
+  id              String            @id @default(uuid())
+  userId          String
+  opportunityId   String
+  status          ApplicationStatus @default(SAVED)
+  notes           String?
+  appliedAt       DateTime?
+  interviewDate   DateTime?
+  followUpDate    DateTime?
+  recruiterName   String?
+  recruiterEmail  String?
+  recruiterPhone  String?
+  referenceNumber String?
+  documents       String[]          @default([])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity Opportunity        @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  events      ApplicationEvent[]
+
+  @@unique([userId, opportunityId])
+  @@index([userId, status])
+  @@index([followUpDate])
+  @@map("applications")
+}
+
+model ApplicationEvent {
+  id            String            @id @default(uuid())
+  applicationId String
+  status        ApplicationStatus
+  note          String?
+  occurredAt    DateTime          @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, occurredAt])
+  @@map("application_events")
+}
+
+/* ------------------------------------------------------------------ *
+ * Notifications
+ * ------------------------------------------------------------------ */
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  link      String?
+  /// Prevents the same alert being sent twice (e.g. a deadline reminder).
+  dedupeKey String?
+  readAt    DateTime?
+  emailedAt DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id                   String                @id @default(uuid())
+  userId               String                @unique
+  emailEnabled         Boolean               @default(true)
+  inAppEnabled         Boolean               @default(true)
+  browserEnabled       Boolean               @default(false)
+  frequency            NotificationFrequency @default(DAILY)
+  newMatches           Boolean               @default(true)
+  deadlineReminders    Boolean               @default(true)
+  followedCompanies    Boolean               @default(true)
+  applicationFollowUps Boolean               @default(true)
+  governmentAlerts     Boolean               @default(true)
+  deadlineLeadDays     Int                   @default(3)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+/* ------------------------------------------------------------------ *
+ * Derived / cached intelligence
+ * ------------------------------------------------------------------ */
+
+/// Cached match scores. Recomputed when a profile or an opportunity changes;
+/// the feed reads from here so ranking 1M opportunities stays a DB operation.
+model MatchScore {
+  id               String   @id @default(uuid())
+  userId           String
+  opportunityId    String
+  overall          Int
+  eligibilityScore Int
+  skillsScore      Int
+  educationScore   Int
+  locationScore    Int
+  experienceScore  Int
+  preferenceScore  Int
+  eligibilityVerdict String
+  matchedSkills    String[] @default([])
+  missingSkills    String[] @default([])
+  components       Json?
+  computedAt       DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, opportunityId])
+  @@index([userId, overall])
+  @@index([opportunityId])
+  @@map("match_scores")
+}
+
+model SkillGapAnalysis {
+  id                  String   @id @default(uuid())
+  userId              String
+  targetRole          String
+  matchPercent        Int
+  haveSkills          String[] @default([])
+  missingSkills       String[] @default([])
+  recommendedLearning Json     @default("[]")
+  computedAt          DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetRole])
+  @@index([userId])
+  @@map("skill_gap_analysis")
+}
+
+model CareerRecommendation {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  payload    Json
+  readiness  Json?
+  computedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("career_recommendations")
+}
+
+/* ------------------------------------------------------------------ *
+ * AI assistant
+ * ------------------------------------------------------------------ */
+
+model AssistantConversation {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String   @default("New conversation")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AssistantMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("assistant_conversations")
+}
+
+model AssistantMessage {
+  id             String   @id @default(uuid())
+  conversationId String
+  role           String
+  content        String
+  /// Opportunities the answer was grounded in — the assistant never invents one.
+  citations      Json     @default("[]")
+  usedFilters    Json?
+  createdAt      DateTime @default(now())
+
+  conversation AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("assistant_messages")
+}
+
+/* ------------------------------------------------------------------ *
+ * Ops
+ * ------------------------------------------------------------------ */
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
