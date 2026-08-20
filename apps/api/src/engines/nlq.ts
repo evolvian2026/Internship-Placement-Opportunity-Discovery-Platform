@@ -116,10 +116,24 @@ export interface NlqResult {
 export function parseNaturalLanguageQuery(rawQuery: string): NlqResult {
   const filters: Partial<OpportunityFilters> = {};
   const notes: string[] = [];
-  let residual = ` ${rawQuery.trim()} `;
+
+  /**
+   * Text that has already become a structured filter.
+   *
+   * Every pattern is matched against the *original* query and the matched text
+   * recorded here; the residual is computed once at the end by subtracting all
+   * of it. Doing this at the end rather than incrementally matters: consuming
+   * "internship" early would otherwise stop a later multi-word rule such as
+   * /ai\s+(engineer|internship)/ from matching, leaving "AI" behind as a
+   * free-text term that silently narrows the search.
+   */
+  const consumed: string[] = [];
 
   const consume = (pattern: RegExp) => {
-    residual = residual.replace(new RegExp(pattern.source, 'gi'), ' ');
+    // Always read from the untouched query, never from a partially-eaten copy.
+    for (const match of rawQuery.matchAll(new RegExp(pattern.source, 'gi'))) {
+      if (match[0].trim()) consumed.push(match[0]);
+    }
   };
 
   /* ---- Opportunity types ---- */
@@ -291,12 +305,19 @@ export function parseNaturalLanguageQuery(rawQuery: string): NlqResult {
     const cleaned = token.replace(/[^\w+#.]/g, '');
     if (cleaned.length < 2) continue;
     const canonical = SKILL_LOOKUP.get(cleaned.toLowerCase());
-    if (canonical) skills.add(canonical);
+    if (canonical) {
+      skills.add(canonical);
+      consumed.push(cleaned);
+    }
   }
   // Multi-word skills ("machine learning", "power bi").
   for (const [alias, canonical] of SKILL_LOOKUP.entries()) {
-    if (alias.includes(' ') && new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(rawQuery)) {
+    if (!alias.includes(' ')) continue;
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\b${escaped}\\b`, 'gi');
+    for (const match of rawQuery.matchAll(pattern)) {
       skills.add(canonical);
+      consumed.push(match[0]);
     }
   }
   if (skills.size) {
@@ -305,12 +326,29 @@ export function parseNaturalLanguageQuery(rawQuery: string): NlqResult {
   }
 
   /* ---- Residual free text ---- */
+
+  // Words that carry no discriminating power in a query and would otherwise
+  // become mandatory substring filters.
   const stopWords = new Set([
-    'for', 'in', 'at', 'the', 'a', 'an', 'with', 'and', 'or', 'me', 'my', 'find', 'show',
-    'get', 'search', 'looking', 'want', 'need', 'which', 'what', 'jobs', 'job', 'roles',
-    'role', 'opportunities', 'opportunity', 'openings', 'opening', 'hiring', 'apply',
-    'can', 'i', 'am', 'eligible', 'best', 'good', 'near',
+    'for', 'in', 'at', 'on', 'to', 'the', 'a', 'an', 'with', 'and', 'or', 'of',
+    'me', 'my', 'find', 'show', 'get', 'give', 'list', 'search', 'searching',
+    'looking', 'look', 'want', 'need', 'which', 'what', 'who', 'where', 'when',
+    'how', 'any', 'some', 'all', 'is', 'are', 'be', 'do', 'does', 'should',
+    'jobs', 'job', 'roles', 'role', 'opportunities', 'opportunity', 'openings',
+    'opening', 'hiring', 'hire', 'apply', 'application', 'vacancy', 'vacancies',
+    'recruitment', 'company', 'companies', 'organisation', 'organisations',
+    'organization', 'organizations', 'employer', 'employers',
+    'can', 'i', 'am', 'eligible', 'eligibility', 'best', 'good', 'top', 'near',
+    'around', 'please', 'available', 'currently', 'right', 'now',
   ]);
+
+  let residual = ` ${rawQuery.trim()} `;
+  // Longest first, so "machine learning" is removed before "learning".
+  for (const text of [...consumed].sort((a, b) => b.length - a.length)) {
+    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    residual = residual.replace(new RegExp(escaped, 'gi'), ' ');
+  }
+
   const residualTokens = residual
     .split(/[\s,]+/)
     .map((t) => t.replace(/[^\w+#.&-]/g, '').trim())

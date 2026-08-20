@@ -577,6 +577,10 @@ export async function createIndustry(actorId: string, name: string): Promise<{ i
   const slug = uniqueSlug(name, '').replace(/-$/, '');
   const industry = await prisma.industry.create({ data: { name, slug } });
   await audit(actorId, 'industry.create', 'Industry', industry.id, { name });
+  // The filter UI reads a cached taxonomy; without this the new industry would
+  // not appear until the cache expired, which defeats the point of being able
+  // to extend the taxonomy at runtime.
+  await invalidateCache('taxonomy:*');
   return { id: industry.id, slug: industry.slug };
 }
 
@@ -595,6 +599,7 @@ export async function createDomain(
     data: { industryId, name, slug: taken ? `${baseSlug}-${industry.slug}` : baseSlug },
   });
   await audit(actorId, 'domain.create', 'Domain', domain.id, { name, industryId });
+  await invalidateCache('taxonomy:*');
   return { id: domain.id, slug: domain.slug };
 }
 
@@ -610,6 +615,7 @@ export async function setTaxonomyActive(
     await prisma.domain.update({ where: { id }, data: { isActive } });
   }
   await audit(actorId, `${kind}.setActive`, kind === 'industry' ? 'Industry' : 'Domain', id, { isActive });
+  await invalidateCache('taxonomy:*');
 }
 
 /* ------------------------------------------------------------------ *

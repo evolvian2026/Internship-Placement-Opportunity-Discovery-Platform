@@ -301,7 +301,10 @@ export async function runIngestion(sourceId: string, options: RunOptions = {}): 
     ...(logs.length ? [prisma.ingestionLog.createMany({ data: logs })] : []),
   ]);
 
+  // Ingestion can introduce a new industry or domain, and both the counts and
+  // the taxonomy are served from cache.
   await invalidateCache('counts:*');
+  await invalidateCache('taxonomy:*');
 
   return {
     ...counters,

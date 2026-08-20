@@ -88,9 +88,24 @@ export function extractEmail(text: string): string | null {
 }
 
 export function extractPhone(text: string): string | null {
-  // Indian and international formats, avoiding years and PIN codes.
-  const match = text.match(/(?:\+91[\s-]?)?[6-9]\d{9}\b|\+\d{1,3}[\s-]?\d{6,12}\b/);
-  return match ? match[0].trim() : null;
+  // Resumes write the same number many ways: "+91 98765 43210", "9876543210",
+  // "+91-98765-43210", "(+91) 98765 43210". Match a candidate run of digits
+  // and separators, then validate on the digits alone so the separators
+  // themselves cannot cause a miss.
+  const candidates = text.match(/(?:\+\d{1,3}[\s.-]?)?(?:\(\d{1,4}\)[\s.-]?)?\d[\d\s.-]{7,17}\d/g);
+  if (!candidates) return null;
+
+  for (const candidate of candidates) {
+    const digits = candidate.replace(/\D/g, '');
+
+    // 10-digit Indian mobile, optionally prefixed with 91 or 0.
+    const local = digits.replace(/^(?:0|91)/, '');
+    if (local.length === 10 && /^[6-9]/.test(local)) return candidate.trim();
+
+    // Other international numbers: a plausible length and an explicit +.
+    if (candidate.includes('+') && digits.length >= 8 && digits.length <= 15) return candidate.trim();
+  }
+  return null;
 }
 
 export function extractName(text: string, email: string | null): string | null {
@@ -181,11 +196,42 @@ const BRANCH_PATTERNS: { pattern: RegExp; branch: string }[] = [
   { pattern: /\bmarketing\b/i, branch: 'Marketing' },
 ];
 
+/**
+ * Groups an education section into blocks.
+ *
+ * A qualification is routinely written across two or three lines:
+ *
+ *   B.Tech in Computer Science, RV College of Engineering
+ *   2022 - 2026 | CGPA: 8.4
+ *
+ * A block therefore starts at a line naming a degree and runs until the next
+ * such line, so the year and grade stay attached to the degree they belong to.
+ */
+function groupEducationBlocks(text: string): string[] {
+  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const blocks: string[] = [];
+  let current: string[] = [];
+
+  const namesADegree = (line: string): boolean => DEGREE_PATTERNS.some((d) => d.pattern.test(line));
+
+  for (const line of lines) {
+    if (namesADegree(line) && current.length > 0) {
+      blocks.push(current.join('\n'));
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length) blocks.push(current.join('\n'));
+
+  // Only blocks that actually name a degree are qualifications.
+  return blocks.filter(namesADegree);
+}
+
 export function extractEducation(text: string): ParsedEducation[] {
   const out: ParsedEducation[] = [];
   const currentYear = new Date().getFullYear();
-  // Look at each line/entry separately so degree, branch and year stay together.
-  const entries = text.split(/\n{1,}/).filter((l) => l.trim().length > 5);
+  const entries = groupEducationBlocks(text);
 
   for (const entry of entries) {
     const degreeMatch = DEGREE_PATTERNS.find((d) => d.pattern.test(entry));
@@ -206,14 +252,16 @@ export function extractEducation(text: string): ParsedEducation[] {
     const pctMatch = entry.match(/(\d{2}(?:\.\d+)?)\s*%/);
     const percentage = pctMatch ? Number(pctMatch[1]) : null;
 
+    // [^\S\n] is "whitespace but not a newline": a block spans several lines,
+    // and \s would let the name run on into the next one and swallow the year.
     const collegeMatch = entry.match(
-      /((?:[A-Z][\w.&'-]*\s+){0,5}(?:Institute|College|University|School|Academy|Vidyalaya)(?:\s+of\s+[\w\s]{2,30})?)/,
+      /((?:[A-Z][\w.&'-]*[^\S\n]+){0,5}(?:Institute|College|University|School|Academy|Vidyalaya)(?:[^\S\n]+of[^\S\n]+[\w][^\n]{1,30})?)/,
     );
 
     out.push({
       degree: degreeMatch.degree,
       branch,
-      college: collegeMatch ? collegeMatch[1].trim().slice(0, 160) : null,
+      college: collegeMatch ? collegeMatch[1].replace(/[\s,;|]+$/, '').trim().slice(0, 160) : null,
       graduationYear,
       cgpa: cgpa != null && cgpa > 0 && cgpa <= 10 ? cgpa : null,
       percentage: percentage != null && percentage >= 30 && percentage <= 100 ? percentage : null,
@@ -238,13 +286,34 @@ export function extractExperience(sections: Map<string, string>): ParsedExperien
 
   const pushFrom = (text: string | undefined, kind: ParsedExperience['kind']): void => {
     if (!text) return;
-    const entries = text
-      .split(/\n(?=[A-Z•\-*])/)
-      .map((e) => e.trim())
-      .filter((e) => e.length > 15 && e.length < 1200)
-      .slice(0, 8);
+    // An entry begins at a heading-like line; everything after it, until the
+    // next heading, is that entry's description. Without this a wrapped
+    // sentence such as "Built recurring SQL reports…" becomes a job title.
+    const looksLikeHeading = (line: string): boolean => {
+      const clean = line.replace(/^[•▪●\-*\s]+/, '').trim();
+      if (clean.length < 4 || clean.length > 90) return false;
+      if (/[.;]$/.test(clean)) return false;
+      if (/^(built|created|developed|designed|implemented|worked|used|responsible|led|managed|analysed|analyzed|improved|reduced|increased)\b/i.test(clean)) {
+        return false;
+      }
+      return /^[A-Z0-9]/.test(clean);
+    };
 
-    for (const entry of entries) {
+    const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+    const entries: string[] = [];
+    let buffer: string[] = [];
+
+    for (const line of lines) {
+      if (looksLikeHeading(line) && buffer.length > 0) {
+        entries.push(buffer.join('\n'));
+        buffer = [line];
+      } else {
+        buffer.push(line);
+      }
+    }
+    if (buffer.length) entries.push(buffer.join('\n'));
+
+    for (const entry of entries.slice(0, 8)) {
       const firstLine = entry.split('\n')[0].replace(/^[•\-*\s]+/, '').trim();
       if (firstLine.length < 4) continue;
 

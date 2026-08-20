@@ -257,6 +257,10 @@ npm test                    # 153 unit + integration tests
 npm run test:e2e            # 18 Playwright tests, desktop + mobile
 npm run test:all            # both
 npm run typecheck
+
+# Against a running deployment, over HTTP:
+python3 scripts/e2e/verify-student-journey.py      # 55 checks
+python3 scripts/e2e/verify-admin-and-security.py   # 45 checks
 ```
 
 The E2E suite runs against Chromium and a Pixel-sized viewport, and includes a
@@ -277,6 +281,9 @@ browse page.
 | `tests/integration/journey` | The full 21-step definition-of-done journey |
 | `tests/integration/admin` | Analytics, sources, taxonomy extension, moderation, audit log |
 | `e2e/journey` | Public discovery, signup → profile → save → track, the assistant, mobile navigation, horizontal-overflow guard |
+| `tests/unit/resume` | Phone formats, multi-line education blocks, experience titles |
+| `tests/integration/cache-invalidation` | Taxonomy cache is cleared on every write |
+| `scripts/e2e/*` | Live HTTP verification of a running deployment |
 
 ---
 
