@@ -356,7 +356,10 @@ export function OpportunityBrowser({ module, title, description, lockedFilters, 
           ) : null}
         </aside>
 
-        <div>
+        {/* min-w-0: a grid child defaults to min-width:auto and refuses to
+            shrink below its content, which pushed long titles and URLs past
+            the viewport on narrow screens. */}
+        <div className="min-w-0">
           <div className="mb-3 flex items-center justify-between gap-2">
             <p className="text-sm text-muted" aria-live="polite">
               {loading ? 'Searching…' : `${data?.total.toLocaleString('en-IN') ?? 0} opportunities`}

@@ -19,15 +19,28 @@ test.describe('public discovery', () => {
   test('search returns opportunities and filters narrow them', async ({ page }) => {
     await page.goto('/opportunities');
     await expect(page.locator('article').first()).toBeVisible({ timeout: 20_000 });
+    expect(await page.locator('article').count()).toBeGreaterThan(0);
 
-    const before = await page.locator('article').count();
-    expect(before).toBeGreaterThan(0);
+    // On narrow screens the filters sit behind a toggle.
+    const filtersToggle = page.getByRole('button', { name: /^filters/i });
+    if (await filtersToggle.isVisible()) await filtersToggle.click();
 
-    // Applying a type facet must change the URL and re-query.
-    const facet = page.getByRole('checkbox').first();
-    if (await facet.isVisible()) {
-      await facet.check();
-      await expect(page).toHaveURL(/[?&]/);
+    // Filter state lives in the URL, so the outcome to assert is the URL and
+    // the re-queried results — not the checkbox's internal state, which React
+    // derives from that URL a tick later.
+    await page.getByRole('checkbox').first().click();
+
+    await expect(page).toHaveURL(/[?&]\w+=/, { timeout: 15_000 });
+    await expect(page.locator('article').first()).toBeVisible({ timeout: 20_000 });
+
+    // Every card must now carry the type that was filtered on.
+    const type = new URL(page.url()).searchParams.get('types');
+    if (type) {
+      const label = type.replace(/_/g, '-').toLowerCase();
+      const cards = page.locator('article');
+      for (let i = 0; i < Math.min(await cards.count(), 5); i += 1) {
+        await expect(cards.nth(i)).toContainText(new RegExp(label.replace('-', '[- ]'), 'i'));
+      }
     }
   });
 
@@ -39,12 +52,22 @@ test.describe('public discovery', () => {
 
   test('an opportunity detail page shows source, eligibility and an apply link', async ({ page }) => {
     await page.goto('/opportunities');
-    await page.locator('article a').first().click();
+    await expect(page.locator('article').first()).toBeVisible({ timeout: 20_000 });
+
+    // The results list re-renders once facets arrive, so clicking a card can
+    // race that update. Waiting for the URL to change is the reliable signal.
+    await page.locator('article').first().locator('a').first().click();
+    await expect(page).toHaveURL(/\/opportunities\/[a-z0-9-]+$/, { timeout: 20_000 });
 
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await expect(page.getByText(/Eligibility/i).first()).toBeVisible();
-    await expect(page.getByText(/source/i).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^eligibility$/i })).toBeVisible();
+    // "Official source" / "Third-party source" — /source/i alone also matches
+    // the word inside "Human Resources".
+    await expect(page.getByText(/(Official|Third-party) source/).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /apply on official site/i })).toBeVisible();
+
+    // Structured data must be present for the SEO requirement.
+    await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(1);
   });
 
   test('the module landing pages render', async ({ page }) => {
@@ -72,8 +95,9 @@ test.describe('student journey', () => {
     await page.getByLabel('CGPA (out of 10)').fill('8.4');
     await page.getByRole('button', { name: /continue/i }).click();
 
-    await page.getByText('Python', { exact: true }).first().click();
-    await page.getByText('SQL', { exact: true }).first().click();
+    // The chips expose the bare skill name as their accessible name.
+    await page.getByRole('button', { name: 'Python', exact: true }).click();
+    await page.getByRole('button', { name: 'SQL', exact: true }).click();
     await page.getByRole('button', { name: /continue/i }).click();
 
     await page.getByLabel('Your city').fill('Bengaluru');
@@ -130,6 +154,24 @@ test.describe('accessibility and responsiveness', () => {
     await page.getByRole('button', { name: /create account/i }).click();
 
     await expect(page.getByRole('navigation', { name: /mobile primary/i })).toBeVisible({ timeout: 20_000 });
+  });
+
+  test('no page scrolls horizontally on a narrow viewport', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'Guards the mobile layout specifically');
+
+    // Regression guard: grid children default to min-width:auto and refuse to
+    // shrink below their content, which pushed the results column past the
+    // viewport on every browse page.
+    for (const path of ['/', '/opportunities', '/internships', '/government-jobs', '/companies']) {
+      await page.goto(path);
+      await page.waitForTimeout(1200);
+
+      const { clientWidth, scrollWidth } = await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      }));
+      expect(scrollWidth, `${path} scrolls horizontally`).toBeLessThanOrEqual(clientWidth + 1);
+    }
   });
 
   test('every page exposes a skip link and a single h1', async ({ page }) => {

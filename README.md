@@ -121,6 +121,7 @@ apps/api/
                        notifications · dashboard · assistant · admin · taxonomy · seo
   src/queue/           BullMQ queues, workers and an in-process fallback scheduler
   tests/               95 unit + 58 integration tests
+apps/web/e2e/          18 Playwright tests (desktop + mobile)
 apps/web/src/
   app/                 Routes (public, authenticated and admin)
   components/          Design system and feature components
@@ -253,9 +254,15 @@ Adding a new *kind* means adding one `Connector` to
 
 ```bash
 npm test                    # 153 unit + integration tests
-npm run test:e2e            # Playwright, needs the stack running
+npm run test:e2e            # 18 Playwright tests, desktop + mobile
+npm run test:all            # both
 npm run typecheck
 ```
+
+The E2E suite runs against Chromium and a Pixel-sized viewport, and includes a
+regression guard for horizontal overflow — a real bug it caught, where CSS
+grid's `min-width: auto` pushed the results column past the viewport on every
+browse page.
 
 | Suite | Covers |
 | --- | --- |
@@ -269,6 +276,7 @@ npm run typecheck
 | `tests/integration/ingestion` | Pipeline, idempotency, dedupe, merging, expiry |
 | `tests/integration/journey` | The full 21-step definition-of-done journey |
 | `tests/integration/admin` | Analytics, sources, taxonomy extension, moderation, audit log |
+| `e2e/journey` | Public discovery, signup → profile → save → track, the assistant, mobile navigation, horizontal-overflow guard |
 
 ---
 

@@ -55,7 +55,7 @@ export function OpportunityCard({
   return (
     <article
       className={cn(
-        'card group relative flex flex-col gap-3 p-4 transition-shadow hover:shadow-md',
+        'card group relative flex min-w-0 flex-col gap-3 p-4 transition-shadow hover:shadow-md',
         compact && 'gap-2 p-3',
       )}
     >

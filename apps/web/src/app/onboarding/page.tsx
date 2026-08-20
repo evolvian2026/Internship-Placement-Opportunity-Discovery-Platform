@@ -141,6 +141,8 @@ function Onboarding() {
           <div>
             <p className="label">Pick the skills you have</p>
             <div className="flex flex-wrap gap-1.5">
+              {/* The ✓/+ prefix is decoration: aria-pressed already conveys the
+                  state, so assistive tech hears only the skill name. */}
               {[...new Set([...SUGGESTED_SKILLS, ...skills])].map((skill) => {
                 const selected = skills.includes(skill);
                 return (
@@ -149,8 +151,12 @@ function Onboarding() {
                     type="button"
                     onClick={() => setSkills(selected ? skills.filter((s) => s !== skill) : [...skills, skill])}
                     aria-pressed={selected}
+                    aria-label={skill}
                   >
-                    <Badge tone={selected ? 'brand' : 'neutral'}>{selected ? '✓ ' : '+ '}{skill}</Badge>
+                    <Badge tone={selected ? 'brand' : 'neutral'}>
+                      <span aria-hidden="true">{selected ? '✓' : '+'}</span>
+                      {skill}
+                    </Badge>
                   </button>
                 );
               })}

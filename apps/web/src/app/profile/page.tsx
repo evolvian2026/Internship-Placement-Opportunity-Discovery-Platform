@@ -204,9 +204,9 @@ function ResumeSection({ profile, onApplied }: { profile: UserProfileDto; onAppl
                     key={skill}
                     type="button"
                     onClick={() => setExtracted({ ...extracted, skills: extracted.skills.filter((s) => s !== skill) })}
-                    title="Remove"
+                    aria-label={`Remove ${skill}`}
                   >
-                    <Badge tone="brand">{skill} ✕</Badge>
+                    <Badge tone="brand">{skill} <span aria-hidden="true">✕</span></Badge>
                   </button>
                 ))}
                 {extracted.skills.length === 0 && <p className="text-sm text-subtle">None detected.</p>}
@@ -434,8 +434,8 @@ function SkillsSection({ profile, onSave, saving }: { profile: UserProfileDto; o
         </div>
         <div className="flex flex-wrap gap-1.5">
           {skills.map((skill) => (
-            <button key={skill} type="button" onClick={() => setSkills(skills.filter((s) => s !== skill))} title="Remove">
-              <Badge tone="brand">{skill} ✕</Badge>
+            <button key={skill} type="button" onClick={() => setSkills(skills.filter((s) => s !== skill))} aria-label={`Remove ${skill}`}>
+              <Badge tone="brand">{skill} <span aria-hidden="true">✕</span></Badge>
             </button>
           ))}
           {skills.length === 0 && <p className="text-sm text-subtle">No skills added yet.</p>}
