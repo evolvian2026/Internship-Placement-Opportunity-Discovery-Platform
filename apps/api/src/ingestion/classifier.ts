@@ -42,18 +42,37 @@ export function classifyType(input: {
   title: string;
   description?: string;
   typeHint?: string;
+  typeDefault?: string;
   organizationName?: string;
 }): Classification<OpportunityType> {
-  const hint = input.typeHint?.trim().toUpperCase().replace(/[\s-]+/g, '_');
-  if (hint && TYPE_RULES.some((r) => r.type === hint)) {
-    return { value: hint as OpportunityType, confidence: 1, reason: 'source declared the type' };
+  const normalise = (value?: string): OpportunityType | null => {
+    const candidate = value?.trim().toUpperCase().replace(/[\s-]+/g, '_');
+    return candidate && TYPE_RULES.some((r) => r.type === candidate)
+      ? (candidate as OpportunityType)
+      : null;
+  };
+
+  // What the source says about this specific posting wins outright.
+  const hint = normalise(input.typeHint);
+  if (hint) {
+    return { value: hint, confidence: 1, reason: 'source declared the type' };
   }
+
+  const sourceDefault = normalise(input.typeDefault);
+  const governmentSource =
+    sourceDefault === 'GOVERNMENT_JOB' || sourceDefault === 'GOVERNMENT_INTERNSHIP';
 
   // Title carries far more signal than the body, so score it first.
   const title = input.title ?? '';
   for (const rule of TYPE_RULES) {
     if (rule.pattern.test(title)) {
-      return { value: rule.type, confidence: rule.confidence, reason: `title matched ${rule.pattern.source}` };
+      // A title on a government portal's feed rarely repeats the word
+      // "government" — it does not need to. Keep the refinement the title
+      // offers without discarding where the posting came from, or the
+      // listing drops out of the government filters entirely.
+      const value =
+        governmentSource && rule.type === 'INTERNSHIP' ? 'GOVERNMENT_INTERNSHIP' : rule.type;
+      return { value, confidence: rule.confidence, reason: `title matched ${rule.pattern.source}` };
     }
   }
 
@@ -66,6 +85,12 @@ export function classifyType(input: {
         reason: `description matched ${rule.pattern.source}`,
       };
     }
+  }
+
+  // Nothing in the posting itself said what it is; now the source-wide
+  // setting is the best available answer.
+  if (sourceDefault) {
+    return { value: sourceDefault, confidence: 0.6, reason: 'source default for this feed' };
   }
 
   return { value: 'FULL_TIME', confidence: 0.4, reason: 'defaulted — no explicit signal' };

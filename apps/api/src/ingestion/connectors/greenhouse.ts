@@ -79,7 +79,7 @@ export const greenhouseConnector: Connector = {
           rawText: description,
           locationText,
           domainHint: job.departments?.[0]?.name,
-          typeHint: config.typeHint,
+          typeDefault: config.typeHint,
           postedDate: parseLooseDate(job.updated_at) ?? undefined,
           rawPayload: job,
         });

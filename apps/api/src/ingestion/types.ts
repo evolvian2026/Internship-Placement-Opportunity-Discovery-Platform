@@ -23,7 +23,14 @@ export interface RawOpportunity {
   locationText?: string;
   workMode?: WorkMode;
   opportunityType?: OpportunityType;
+  /** Type stated by the source *for this posting* — authoritative. */
   typeHint?: string;
+  /**
+   * Type configured for the source as a whole. Only a fallback: a government
+   * portal's feed carries jobs and internships side by side, so one setting
+   * must not overrule what an individual posting plainly says it is.
+   */
+  typeDefault?: string;
   industryHint?: string;
   domainHint?: string;
   role?: string;

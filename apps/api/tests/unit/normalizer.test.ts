@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { classifyType } from '../../src/ingestion/classifier';
 import { normalize, parseLocationText } from '../../src/ingestion/normalizer';
 import { validate } from '../../src/ingestion/validator';
 import type { RawOpportunity } from '../../src/ingestion/types';
@@ -131,5 +132,39 @@ describe('validate', () => {
     expect(result.ok).toBe(true);
     expect(result.warnings.length).toBeGreaterThan(0);
     expect(result.completeness).toBeLessThan(60);
+  });
+});
+
+describe('classifyType precedence', () => {
+  const classify = (input: Parameters<typeof classifyType>[0]) => classifyType(input).value;
+
+  it('takes what the source says about this posting over everything else', () => {
+    expect(
+      classify({ title: 'Summer Internship Programme', typeHint: 'CONTRACT' }),
+    ).toBe('CONTRACT');
+  });
+
+  it('lets the title refine a source-wide default', () => {
+    // A government portal's feed carries jobs and internships together. One
+    // configured type must not flatten every posting into the same bucket.
+    expect(
+      classify({ title: 'Summer Internship Programme 2026', typeDefault: 'GOVERNMENT_JOB' }),
+    ).toBe('GOVERNMENT_INTERNSHIP');
+
+    expect(
+      classify({ title: 'Management Trainee (Finance)', typeDefault: 'GOVERNMENT_JOB' }),
+    ).toBe('TRAINEE');
+  });
+
+  it('falls back to the source default when the posting gives no signal', () => {
+    expect(
+      classify({ title: 'Junior Engineer (Civil) – Advt. No. 04/2026', typeDefault: 'GOVERNMENT_JOB' }),
+    ).toBe('GOVERNMENT_JOB');
+  });
+
+  it('ignores a default it does not recognise rather than guessing', () => {
+    expect(classify({ title: 'Junior Engineer (Civil)', typeDefault: 'NOT_A_REAL_TYPE' })).toBe(
+      'FULL_TIME',
+    );
   });
 });

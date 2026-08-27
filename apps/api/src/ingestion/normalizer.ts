@@ -162,6 +162,7 @@ export function normalize(raw: RawOpportunity): NormalizedOpportunity {
     title: raw.title,
     description,
     typeHint: raw.typeHint ?? raw.opportunityType,
+    typeDefault: raw.typeDefault,
     organizationName: raw.organizationName,
   });
   const opportunityType = raw.opportunityType ?? type.value;
