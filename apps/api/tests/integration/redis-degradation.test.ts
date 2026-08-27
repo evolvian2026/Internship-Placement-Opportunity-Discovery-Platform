@@ -59,3 +59,45 @@ describe('cache behaviour when Redis is unreachable', () => {
     expect(Date.now() - started).toBeLessThan(MUST_ANSWER_WITHIN_MS);
   });
 });
+
+describe('concurrent callers of a cold key', () => {
+  it('runs the producer once and shares the result', async () => {
+    // Each search computes seven facet aggregates. One producer per concurrent
+    // request exhausts the database connection pool, which is how a slow page
+    // became a failing one under load.
+    let running = 0;
+    let peak = 0;
+    let started = 0;
+
+    const producer = async (): Promise<string> => {
+      started += 1;
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      running -= 1;
+      return 'computed once';
+    };
+
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => cached('degradation:single-flight', 60, producer)),
+    );
+
+    expect(started).toBe(1);
+    expect(peak).toBe(1);
+    expect(results).toEqual(Array(20).fill('computed once'));
+  });
+
+  it('lets a later caller retry after the producer fails', async () => {
+    let attempts = 0;
+    const failing = async (): Promise<string> => {
+      attempts += 1;
+      throw new Error('producer failed');
+    };
+
+    await expect(cached('degradation:failing', 60, failing)).rejects.toThrow('producer failed');
+    await expect(cached('degradation:failing', 60, failing)).rejects.toThrow('producer failed');
+
+    // A failure must not be latched: the key is released, not left in flight.
+    expect(attempts).toBe(2);
+  });
+});

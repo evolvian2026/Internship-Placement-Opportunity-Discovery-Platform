@@ -114,6 +114,16 @@ export async function pingCache(): Promise<boolean | null> {
   }
 }
 
+/**
+ * Producers already running in this process, keyed by cache key.
+ *
+ * Without this, a cold key under load starts one producer per concurrent
+ * request. For the search facets that is seven aggregate queries each, which
+ * exhausts the database connection pool and turns a slow page into failing
+ * ones. Callers that arrive while a producer is in flight wait for it.
+ */
+const inFlight = new Map<string, Promise<unknown>>();
+
 /** Small helper for read-through caching of expensive aggregate queries. */
 export async function cached<T>(
   key: string,
@@ -121,22 +131,37 @@ export async function cached<T>(
   producer: () => Promise<T>,
 ): Promise<T> {
   const redis = getCacheRedis();
-  if (!redis) return producer();
 
-  try {
-    const hit = await redis.get(key);
-    if (hit) return JSON.parse(hit) as T;
-  } catch {
-    // A cache read failure must never fail the request.
+  if (redis) {
+    try {
+      const hit = await redis.get(key);
+      if (hit) return JSON.parse(hit) as T;
+    } catch {
+      // A cache read failure must never fail the request.
+    }
   }
 
-  const value = await producer();
+  const existing = inFlight.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const run = (async () => {
+    const value = await producer();
+    if (redis) {
+      try {
+        await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+      } catch {
+        // ignore
+      }
+    }
+    return value;
+  })();
+
+  inFlight.set(key, run);
   try {
-    await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-  } catch {
-    // ignore
+    return await run;
+  } finally {
+    inFlight.delete(key);
   }
-  return value;
 }
 
 export async function invalidateCache(pattern: string): Promise<void> {

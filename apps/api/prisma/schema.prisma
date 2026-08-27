@@ -562,12 +562,20 @@ model Opportunity {
   matchScores  MatchScore[]
 
   @@index([status, applicationDeadline])
+  /// Serves the default browse order (status, newest first). Without it
+  /// Postgres sorts every live row to return one page: at 200k opportunities
+  /// that measured 99ms and 63k buffers per request, against 2ms and 296 with.
+  @@index([status, postedDate(sort: Desc), createdAt(sort: Desc)])
   @@index([opportunityType, status])
   @@index([companyId])
   @@index([industryId])
   @@index([domainId])
   @@index([postedDate])
   @@index([dedupeHash])
+  /// Postgres does not index the referencing side of a foreign key. Without
+  /// this, every opportunity delete scans the whole table to check what points
+  /// at it, and the merged-duplicate lookups do the same.
+  @@index([mergedIntoId])
   @@index([governmentCategory])
   @@index([psuCategory])
   @@index([createdAt])

@@ -15,6 +15,15 @@ async function main(): Promise<void> {
     );
   });
 
+  // Node keeps idle connections for 5s by default, which is shorter than the
+  // idle timeout of every load balancer that would sit in front of this. The
+  // balancer then reuses a socket the server is closing and reports a 502 that
+  // never reached the application. Outlive it, and keep headersTimeout above
+  // keepAliveTimeout as Node requires.
+  server.keepAliveTimeout = env.KEEP_ALIVE_TIMEOUT_MS;
+  server.headersTimeout = env.KEEP_ALIVE_TIMEOUT_MS + 5_000;
+  server.requestTimeout = env.REQUEST_TIMEOUT_MS;
+
   // Without Redis the API process also runs the recurring jobs, so a developer
   // gets deadline reminders and verification without a separate worker.
   if (env.INGESTION_ENABLED && !env.queueEnabled) {

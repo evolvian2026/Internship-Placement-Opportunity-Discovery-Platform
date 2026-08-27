@@ -56,6 +56,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-opportunities}?schema=public
       REDIS_URL: redis://redis:6379
       QUEUE_ENABLED: 'true'
+      DATABASE_CONNECTION_LIMIT: ${DATABASE_CONNECTION_LIMIT:-25}
+      KEEP_ALIVE_TIMEOUT_MS: ${KEEP_ALIVE_TIMEOUT_MS:-65000}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}

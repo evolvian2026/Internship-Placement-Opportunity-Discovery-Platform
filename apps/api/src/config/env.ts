@@ -25,6 +25,16 @@ const schema = z.object({
   PUBLIC_SITE_URL: z.string().default('http://localhost:3000'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  /**
+   * Prisma's pool defaults to (cores * 2 + 1), which on a small container is
+   * around nine — fewer connections than a single search can ask for at once.
+   * Size it deliberately instead, against what the database will accept.
+   */
+  DATABASE_CONNECTION_LIMIT: int(25),
+  DATABASE_POOL_TIMEOUT_SECONDS: int(20),
+  /** Must exceed the idle timeout of whatever proxies to this service. */
+  KEEP_ALIVE_TIMEOUT_MS: int(65_000),
+  REQUEST_TIMEOUT_MS: int(120_000),
 
   REDIS_URL: z.string().optional().default(''),
   QUEUE_ENABLED: bool(true),

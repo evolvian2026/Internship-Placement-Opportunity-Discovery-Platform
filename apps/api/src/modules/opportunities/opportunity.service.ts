@@ -9,6 +9,7 @@ import {
   type OpportunitySummaryDto,
 } from '@odp/shared';
 import type { Prisma } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { prisma } from '../../lib/prisma';
 import { NotFoundError } from '../../lib/errors';
 import { addDays, endOfDay, startOfDay } from '../../lib/dates';
@@ -100,7 +101,50 @@ export async function decorate(
   });
 }
 
-async function computeFacets(where: Prisma.OpportunityWhereInput): Promise<OpportunitySearchResponse['facets']> {
+/**
+ * Facet counts are aggregates over the whole matching set, so each one costs a
+ * pass over it — and there are seven, on every search. They depend only on the
+ * catalogue, never on who is asking, so they cache well: paging through
+ * results recomputes nothing, and the `counts:` prefix means ingestion and
+ * admin edits already invalidate them along with the other catalogue counts.
+ */
+const FACET_TTL_SECONDS = 300;
+
+/** Stable key for a filter object, independent of the order keys were built in. */
+function cacheKeyFor(where: Prisma.OpportunityWhereInput): string {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object' && !(value instanceof Date)) {
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => [k, canonical(v)]),
+      );
+    }
+    return value;
+  };
+  const digest = createHash('sha1').update(JSON.stringify(canonical(where))).digest('hex');
+  return `counts:search:${digest}`;
+}
+
+function computeFacets(
+  where: Prisma.OpportunityWhereInput,
+): Promise<OpportunitySearchResponse['facets']> {
+  return cached(`${cacheKeyFor(where)}:facets`, FACET_TTL_SECONDS, () => queryFacets(where));
+}
+
+/**
+ * The result total is another full-set aggregate, and pagination asks for it
+ * again on every page. Cached on the same terms as the facets: it moves only
+ * when the catalogue does.
+ */
+function countMatching(where: Prisma.OpportunityWhereInput): Promise<number> {
+  return cached(`${cacheKeyFor(where)}:total`, FACET_TTL_SECONDS, () =>
+    prisma.opportunity.count({ where }),
+  );
+}
+
+async function queryFacets(where: Prisma.OpportunityWhereInput): Promise<OpportunitySearchResponse['facets']> {
   const [byType, byWorkMode, byIndustry, byDomain, byCity, byCompanyType, bySkill] = await Promise.all([
     prisma.opportunity.groupBy({ by: ['opportunityType'], where, _count: { _all: true } }),
     prisma.opportunity.groupBy({ by: ['workMode'], where, _count: { _all: true } }),
@@ -292,7 +336,7 @@ export async function searchOpportunities(
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
-    prisma.opportunity.count({ where }),
+    countMatching(where),
     options.includeFacets === false ? Promise.resolve(emptyFacets()) : computeFacets(where),
   ]);
 
