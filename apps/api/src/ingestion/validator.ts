@@ -45,7 +45,6 @@ export function validate(
   }
 
   try {
-    // eslint-disable-next-line no-new
     new URL(opportunity.sourceUrl);
   } catch {
     errors.push('Source URL is not a valid URL');

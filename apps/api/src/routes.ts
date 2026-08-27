@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from './lib/prisma';
-import { getRedis } from './lib/redis';
+import { pingCache } from './lib/redis';
 import { env } from './config/env';
 import { asyncHandler } from './middleware/error';
 import { authRouter } from './modules/auth/auth.routes';
@@ -31,17 +31,8 @@ apiRouter.get(
       checks.database = 'unavailable';
     }
 
-    const redis = getRedis();
-    if (redis) {
-      try {
-        await redis.ping();
-        checks.redis = 'ok';
-      } catch {
-        checks.redis = 'unavailable';
-      }
-    } else {
-      checks.redis = 'not configured';
-    }
+    const redis = await pingCache();
+    checks.redis = redis == null ? 'not configured' : redis ? 'ok' : 'unavailable';
 
     const healthy = checks.database === 'ok';
     res.status(healthy ? 200 : 503).json({

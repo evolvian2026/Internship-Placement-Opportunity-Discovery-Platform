@@ -8,7 +8,7 @@ WORKDIR /app
 
 # --- deps -------------------------------------------------------------------
 FROM base AS deps
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
@@ -23,7 +23,6 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
     NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY tsconfig.base.json package.json ./
 COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web

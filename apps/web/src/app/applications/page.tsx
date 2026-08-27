@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { APPLICATION_PIPELINE, APPLICATION_STATUSES, type ApplicationDto, type UserAnalyticsDto } from '@odp/shared';
 import { api, ApiError } from '@/lib/api';
 import { RequireAuth } from '@/components/RequireAuth';
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Skeleton, StatTile } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Skeleton, StatTile } from '@/components/ui';
 import { formatDate } from '@/lib/utils';
 
 export default function ApplicationsPage() {

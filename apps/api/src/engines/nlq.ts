@@ -20,13 +20,6 @@ import {
  * identically with or without an API key configured.
  */
 
-interface Rule {
-  pattern: RegExp;
-  apply: (filters: Partial<OpportunityFilters>, match: RegExpMatchArray) => void;
-  /** Human-readable note added to the interpretation summary. */
-  describe: (match: RegExpMatchArray) => string;
-}
-
 const TYPE_PHRASES: { pattern: RegExp; types: OpportunityType[]; label: string }[] = [
   { pattern: /\b(internships?|intern)\b/i, types: ['INTERNSHIP', 'GOVERNMENT_INTERNSHIP'], label: 'internships' },
   { pattern: /\bgovernment\s+internships?\b/i, types: ['GOVERNMENT_INTERNSHIP'], label: 'government internships' },

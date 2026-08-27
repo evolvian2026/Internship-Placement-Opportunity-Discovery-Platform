@@ -47,7 +47,7 @@ const PATTERNS: { code: string; label: string; severity: 1 | 2 | 3; pattern: Reg
     code: 'PERSONAL_CONTACT_ONLY',
     label: 'Directs applicants to a personal messaging contact only',
     severity: 2,
-    pattern: /\b(whats\s?app\s+(me|us|on)\s*[:\-]?\s*(\+?\d[\d\s-]{7,})|telegram\s+(me|us|@))/i,
+    pattern: /\b(whats\s?app\s+(me|us|on)\s*[:-]?\s*(\+?\d[\d\s-]{7,})|telegram\s+(me|us|@))/i,
   },
   {
     code: 'URGENCY_PRESSURE',

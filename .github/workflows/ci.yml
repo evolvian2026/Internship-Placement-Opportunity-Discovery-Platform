@@ -28,13 +28,22 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opportunities_test?schema=public
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opportunities_test?schema=public
       JWT_ACCESS_SECRET: ci-access-secret-that-is-at-least-32-characters-long
       JWT_REFRESH_SECRET: ci-refresh-secret-that-is-at-least-32-characters-long
       DATA_SOURCE: mock
-      REDIS_URL: ''
+      REDIS_URL: redis://localhost:6379
       QUEUE_ENABLED: 'false'
 
     steps:
@@ -88,6 +97,15 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opportunities?schema=public
       JWT_ACCESS_SECRET: ci-access-secret-that-is-at-least-32-characters-long
@@ -95,7 +113,7 @@ jobs:
       DATA_SOURCE: mock
       # The E2E run drives the UI; background ingestion would add noise.
       INGESTION_ENABLED: 'false'
-      REDIS_URL: ''
+      REDIS_URL: redis://localhost:6379
       QUEUE_ENABLED: 'false'
       NEXT_PUBLIC_API_BASE_URL: http://localhost:4000
       NEXT_PUBLIC_SITE_URL: http://localhost:3000

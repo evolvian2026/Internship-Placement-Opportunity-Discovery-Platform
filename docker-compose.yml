@@ -3,8 +3,9 @@
 #
 #   cp .env.docker.example .env
 #   docker compose up --build
-#   docker compose exec api npm run db:push && docker compose exec api npm run db:seed
-#   docker compose exec api npm run ingest
+#   docker compose exec api npm run db:push
+#   docker compose exec api npm run db:seed:prod
+#   docker compose exec api npm run ingest:prod
 # ---------------------------------------------------------------------------
 name: opportunity-discovery
 
@@ -85,7 +86,7 @@ services:
       redis: { condition: service_healthy }
     # Same image as the API, different entrypoint: source connectors, the
     # freshness sweep and notification digests run off the request path.
-    command: ['node', 'dist/apps/api/src/worker.js']
+    command: ['node', 'dist/src/worker.js']
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-opportunities}?schema=public

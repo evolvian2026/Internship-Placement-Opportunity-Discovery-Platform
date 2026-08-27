@@ -15,14 +15,6 @@ import { INDUSTRY_SEED, SKILLS, skillSlug } from '@odp/shared';
 
 const prisma = new PrismaClient();
 
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/&/g, ' and ')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
 async function seedTaxonomy(): Promise<void> {
   let industries = 0;
   let domains = 0;
