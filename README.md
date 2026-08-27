@@ -10,7 +10,7 @@ For every opportunity it answers four questions:
 | **What is available?** | Aggregation from official career pages, government portals, PSU sites and public feeds, normalised into one schema |
 | **Am I eligible?** | An eligibility engine that checks degree, branch, batch, CGPA, backlogs, experience, age and citizenship against what the posting actually published |
 | **Which are best for me?** | A transparent, explainable match score across six weighted components — gated by eligibility |
-| **What next?** | Skill-gap analysis, career readiness, deadline reminders and an application tracker |
+| **What next?** | Unlock prompts, near-miss analysis, skill gaps, career readiness, deadline reminders and an application tracker |
 
 ---
 
@@ -283,6 +283,8 @@ browse page.
 | `e2e/journey` | Public discovery, signup → profile → save → track, the assistant, mobile navigation, horizontal-overflow guard |
 | `tests/unit/resume` | Phone formats, multi-line education blocks, experience titles |
 | `tests/integration/cache-invalidation` | Taxonomy cache is cleared on every write |
+| `tests/unit/insights` | Unlock ranking, near-miss grouping and gap thresholds |
+| `tests/integration/features` | Unlocks, near misses, saved searches and the alert loop |
 | `scripts/e2e/*` | Live HTTP verification of a running deployment |
 
 ---

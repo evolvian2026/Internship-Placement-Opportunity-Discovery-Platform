@@ -7,6 +7,7 @@ import {
   sendFollowedCompanyAlerts,
   sendNewMatchDigests,
 } from '../modules/notifications/notification.service';
+import { sendSavedSearchAlerts } from '../modules/searches/search.service';
 
 /**
  * The unit of background work. Both the BullMQ worker and the in-process
@@ -21,7 +22,8 @@ export type JobName =
   | 'notify:deadlines'
   | 'notify:followed-companies'
   | 'notify:follow-ups'
-  | 'notify:new-matches';
+  | 'notify:new-matches'
+  | 'notify:saved-searches';
 
 export interface JobPayloads {
   'ingest:source': { sourceId: string; triggeredBy?: string; limit?: number };
@@ -31,6 +33,7 @@ export interface JobPayloads {
   'notify:followed-companies': Record<string, never>;
   'notify:follow-ups': Record<string, never>;
   'notify:new-matches': Record<string, never>;
+  'notify:saved-searches': Record<string, never>;
 }
 
 export const JOB_HANDLERS: {
@@ -44,6 +47,7 @@ export const JOB_HANDLERS: {
   'notify:followed-companies': async () => ({ sent: await sendFollowedCompanyAlerts() }),
   'notify:follow-ups': async () => ({ sent: await sendApplicationFollowUps() }),
   'notify:new-matches': async () => ({ sent: await sendNewMatchDigests() }),
+  'notify:saved-searches': async () => ({ sent: await sendSavedSearchAlerts() }),
 };
 
 export async function executeJob<K extends JobName>(name: K, payload: JobPayloads[K]): Promise<unknown> {

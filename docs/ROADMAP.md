@@ -47,6 +47,11 @@ health · system health · audit log.
 153 unit and integration tests · Playwright E2E · Docker images for API, worker
 and web · compose stack · GitHub Actions CI · security hardening · documentation.
 
+### Guidance layer
+Unlock prompts driven by the eligibility engine's own `unknown` checks ·
+near-miss analysis with measured, rankable gaps · saved searches with a
+per-search alert watermark.
+
 ---
 
 ## Designed to extend without re-architecting

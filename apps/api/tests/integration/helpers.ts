@@ -9,6 +9,7 @@ export const app: Express = createApp();
 export async function resetDatabase(): Promise<void> {
   // Order matters only where cascades do not cover it.
   await prisma.$transaction([
+    prisma.savedSearch.deleteMany(),
     prisma.assistantMessage.deleteMany(),
     prisma.assistantConversation.deleteMany(),
     prisma.matchScore.deleteMany(),

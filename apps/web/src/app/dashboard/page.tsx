@@ -6,6 +6,7 @@ import type { DashboardDto } from '@odp/shared';
 import { api, ApiError } from '@/lib/api';
 import { RequireAuth } from '@/components/RequireAuth';
 import { OpportunityCard, OpportunityCardSkeleton } from '@/components/OpportunityCard';
+import { UnlockCard } from '@/components/UnlockCard';
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Meter, StatTile } from '@/components/ui';
 import { formatDate } from '@/lib/utils';
 
@@ -85,6 +86,10 @@ function Dashboard() {
         )}
       </header>
 
+      {/* One missing field often blocks more opportunities than anything else
+          on this page, so it sits above the numbers. */}
+      <UnlockCard />
+
       <section aria-label="Your numbers" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatTile label="Matches" value={data.stats.matchingOpportunities} tone="brand" hint="65%+ match" />
         <StatTile label="New today" value={data.stats.newToday} tone="info" />
@@ -101,9 +106,10 @@ function Dashboard() {
       <section aria-labelledby="recommended">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 id="recommended" className="text-lg font-semibold">Recommended for you</h2>
-          <Link href="/recommended" className="text-sm font-medium text-brand hover:underline">
-            View all
-          </Link>
+          <div className="flex items-center gap-3 text-sm font-medium">
+            <Link href="/near-misses" className="text-muted hover:text-brand">Near misses</Link>
+            <Link href="/recommended" className="text-brand hover:underline">View all</Link>
+          </div>
         </div>
         {data.recommended.length === 0 ? (
           <Card>

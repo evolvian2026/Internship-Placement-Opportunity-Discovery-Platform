@@ -254,13 +254,53 @@ export interface MatchScoreDto {
   computedAt: string;
 }
 
+/**
+ * How far a failed criterion is from being met, when that distance is
+ * meaningful. Present only on `failed` checks that have a measurable gap —
+ * it powers the near-miss view, which turns "not eligible" into "you miss
+ * this by 0.2 CGPA".
+ */
+export interface EligibilityGapDto {
+  /** What the posting asks for, formatted for display. */
+  required: string;
+  /** What the profile currently holds. */
+  actual: string;
+  /**
+   * Distance from eligibility, normalised so gaps of the same kind can be
+   * ranked. Null when the gap is categorical (a branch, a citizenship).
+   */
+  shortfall: number | null;
+  /** Unit for `shortfall`, e.g. "CGPA", "%", "years", "backlogs". */
+  unit: string | null;
+  /** True when the user could plausibly close this gap. */
+  closable: boolean;
+}
+
 export interface EligibilityCheckDto {
   key: string;
   label: string;
   passed: boolean | null;
   /** `null` = could not be determined from the posting or the profile. */
   message: string;
+  gap?: EligibilityGapDto;
+  /**
+   * For an `unknown` check: the profile field that would resolve it.
+   * Drives the "add this one thing to unlock N opportunities" prompt.
+   */
+  resolvedBy?: ProfileFieldKey;
 }
+
+/** Profile fields the eligibility engine can be blocked on. */
+export type ProfileFieldKey =
+  | 'education.degree'
+  | 'education.branch'
+  | 'education.graduationYear'
+  | 'education.cgpa'
+  | 'education.percentage'
+  | 'education.backlogs'
+  | 'profile.dateOfBirth'
+  | 'profile.country'
+  | 'profile.yearsOfExperience';
 
 export interface EligibilitySummaryDto {
   verdict: EligibilityVerdict;
@@ -407,6 +447,7 @@ export interface NotificationPreferencesDto {
   browserEnabled: boolean;
   frequency: NotificationFrequency;
   newMatches: boolean;
+  savedSearches: boolean;
   deadlineReminders: boolean;
   followedCompanies: boolean;
   applicationFollowUps: boolean;
@@ -541,4 +582,78 @@ export interface AssistantReplyDto {
   message: AssistantMessageDto;
   /** Filters the assistant applied when it queried the opportunity database. */
   usedFilters?: Partial<OpportunityFilters>;
+}
+
+/* ------------------------------------------------------------------ *
+ * Profile unlocks (one missing field can block many opportunities)
+ * ------------------------------------------------------------------ */
+
+export interface ProfileUnlockDto {
+  field: ProfileFieldKey;
+  label: string;
+  /** What to ask the user, in their own terms. */
+  prompt: string;
+  /** Why it matters, phrased as the payoff. */
+  detail: string;
+  /** How many opportunities this field alone would resolve. */
+  blockedCount: number;
+  /** Where in the app to go and fix it. */
+  href: string;
+  /** Sample of the opportunities being held up. */
+  examples: { id: string; slug: string; title: string; organizationName: string }[];
+}
+
+export interface ProfileUnlocksDto {
+  /** Opportunities whose eligibility could not be decided. */
+  unresolvedCount: number;
+  /** Of the candidate set that was examined. */
+  examinedCount: number;
+  unlocks: ProfileUnlockDto[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Near misses
+ * ------------------------------------------------------------------ */
+
+export interface NearMissItemDto {
+  opportunity: OpportunitySummaryDto;
+  reason: string;
+  gap: EligibilityGapDto;
+}
+
+export interface NearMissGroupDto {
+  key: string;
+  /** e.g. "Just short on CGPA" */
+  title: string;
+  /** e.g. "Raising your CGPA to 7.0 would open 8 more opportunities." */
+  advice: string;
+  closable: boolean;
+  items: NearMissItemDto[];
+}
+
+export interface NearMissesDto {
+  examinedCount: number;
+  ineligibleCount: number;
+  groups: NearMissGroupDto[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Saved searches & alerts
+ * ------------------------------------------------------------------ */
+
+export interface SavedSearchDto {
+  id: string;
+  name: string;
+  /** The original natural-language query, when there was one. */
+  query: string | null;
+  filters: Partial<OpportunityFilters>;
+  /** Human-readable summary of what this search watches. */
+  description: string;
+  alertsEnabled: boolean;
+  frequency: NotificationFrequency;
+  matchCount: number;
+  newSinceLastRun: number;
+  lastRunAt: string | null;
+  lastNotifiedAt: string | null;
+  createdAt: string;
 }

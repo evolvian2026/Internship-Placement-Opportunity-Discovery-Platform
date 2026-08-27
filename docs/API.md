@@ -151,6 +151,23 @@ Statuses: `SAVED` `INTERESTED` `APPLIED` `ASSESSMENT` `INTERVIEW`
 | GET | `/readiness` | Score with a weight and hint per component |
 | GET | `/skill-gap` | `?opportunityId=` for one, omit for the matched market |
 | GET | `/recommendations` | Roles, skills, industries, companies, certifications, projects |
+| GET | `/unlocks` | Which profile field would resolve the most undecided verdicts, ranked by impact |
+| GET | `/near-misses` | Ineligible opportunities grouped by blocking criterion, with the measured gap |
+
+## Saved searches — `/saved-searches`  *(auth required)*
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/` | Each with a plain-language description, match count and alert state |
+| POST | `/` | `{name?, query?, filters, frequency?}` — 409 on a duplicate name |
+| PATCH | `/:id` | Rename, pause/resume, change frequency |
+| DELETE | `/:id` | |
+| GET | `/:id/results` | Runs the search live and returns a page of results |
+
+Alerts fire from the `notify:saved-searches` job. Each search carries a
+watermark (`lastRunAt`): only opportunities published after it count as new, and
+it advances only when the pass succeeds, so a failure re-reports next time
+rather than dropping an alert.
 
 ## Notifications — `/notifications`  *(auth required)*
 

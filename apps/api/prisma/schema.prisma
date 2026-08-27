@@ -140,6 +140,7 @@ enum ExperienceKind {
 
 enum NotificationType {
   NEW_MATCHES
+  SAVED_SEARCH
   DEADLINE_REMINDER
   FOLLOWED_COMPANY
   APPLICATION_FOLLOW_UP
@@ -205,6 +206,7 @@ model User {
   followedCompanies       FollowedCompany[]
   notifications           Notification[]
   conversations           AssistantConversation[]
+  savedSearches           SavedSearch[]
   skillGapAnalyses        SkillGapAnalysis[]
   careerRecommendations   CareerRecommendation[]
   matchScores             MatchScore[]
@@ -817,6 +819,7 @@ model NotificationPreference {
   browserEnabled       Boolean               @default(false)
   frequency            NotificationFrequency @default(DAILY)
   newMatches           Boolean               @default(true)
+  savedSearches        Boolean               @default(true)
   deadlineReminders    Boolean               @default(true)
   followedCompanies    Boolean               @default(true)
   applicationFollowUps Boolean               @default(true)
@@ -923,6 +926,36 @@ model AssistantMessage {
 
   @@index([conversationId, createdAt])
   @@map("assistant_messages")
+}
+
+/// A search a user asked to be told about.
+///
+/// Government notification windows are short, so the alert loop matters more
+/// than the saved filter itself: `lastRunAt` is the watermark that decides what
+/// counts as "new" on the next pass.
+model SavedSearch {
+  id             String                @id @default(uuid())
+  userId         String
+  name           String
+  /// The natural-language query the user typed, when there was one.
+  query          String?
+  /// Structured filters, in the same shape the search API accepts.
+  filters        Json                  @default("{}")
+  alertsEnabled  Boolean               @default(true)
+  frequency      NotificationFrequency @default(DAILY)
+  /// Watermark: opportunities created after this are "new" to this search.
+  lastRunAt      DateTime?
+  lastNotifiedAt DateTime?
+  /// Result count at the last run, so the UI can show movement.
+  lastMatchCount Int                   @default(0)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([alertsEnabled, frequency])
+  @@map("saved_searches")
 }
 
 /* ------------------------------------------------------------------ *

@@ -12,6 +12,7 @@ import { applicationRouter, savedRouter } from './modules/applications/applicati
 import { notificationRouter } from './modules/notifications/notification.routes';
 import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 import { assistantRouter } from './modules/assistant/assistant.routes';
+import { savedSearchRouter } from './modules/searches/search.routes';
 import { adminRouter } from './modules/admin/admin.routes';
 import { taxonomyRouter } from './modules/taxonomy/taxonomy.routes';
 import { seoRouter } from './modules/seo/seo.routes';
@@ -62,6 +63,7 @@ apiRouter.use('/saved', savedRouter);
 apiRouter.use('/notifications', notificationRouter);
 apiRouter.use('/dashboard', dashboardRouter);
 apiRouter.use('/assistant', assistantRouter);
+apiRouter.use('/saved-searches', savedSearchRouter);
 apiRouter.use('/taxonomy', taxonomyRouter);
 apiRouter.use('/seo', seoRouter);
 apiRouter.use('/admin', adminRouter);

@@ -8,8 +8,11 @@ import type {
   CareerRecommendationDto,
   DashboardDto,
   DeadlineGroupDto,
+  NearMissesDto,
   NotificationDto,
   NotificationPreferencesDto,
+  ProfileUnlocksDto,
+  SavedSearchDto,
   OpportunityDetailDto,
   OpportunityFilters,
   OpportunitySearchResponse,
@@ -260,6 +263,25 @@ export const api = {
       apiFetch<SkillGapDto>(`/api/dashboard/skill-gap${opportunityId ? `?opportunityId=${opportunityId}` : ''}`, { token }),
     recommendations: (token?: string | null) =>
       apiFetch<CareerRecommendationDto>('/api/dashboard/recommendations', { token }),
+    /** Which single profile field would resolve the most "we cannot tell" verdicts. */
+    unlocks: (token?: string | null) => apiFetch<ProfileUnlocksDto>('/api/dashboard/unlocks', { token }),
+    /** Opportunities the user just misses, grouped by what blocked them. */
+    nearMisses: (token?: string | null) => apiFetch<NearMissesDto>('/api/dashboard/near-misses', { token }),
+  },
+
+  savedSearches: {
+    list: (token?: string | null) => apiFetch<SavedSearchDto[]>('/api/saved-searches', { token }),
+    create: (body: {
+      name?: string;
+      query?: string | null;
+      filters: Record<string, unknown>;
+      frequency?: string;
+    }) => apiFetch<SavedSearchDto>('/api/saved-searches', { method: 'POST', body }),
+    update: (id: string, body: { name?: string; alertsEnabled?: boolean; frequency?: string }) =>
+      apiFetch<SavedSearchDto>(`/api/saved-searches/${id}`, { method: 'PATCH', body }),
+    remove: (id: string) => apiFetch<void>(`/api/saved-searches/${id}`, { method: 'DELETE' }),
+    results: (id: string, page = 1, token?: string | null) =>
+      apiFetch<OpportunitySearchResponse>(`/api/saved-searches/${id}/results?page=${page}`, { token }),
   },
 
   notifications: {

@@ -23,6 +23,7 @@ const TASKS: ScheduledTask[] = [
   { name: 'maintenance:freshness', intervalMs: HOUR, initialDelayMs: 60_000 },
   { name: 'notify:deadlines', intervalMs: 12 * HOUR, initialDelayMs: 120_000 },
   { name: 'notify:new-matches', intervalMs: 24 * HOUR, initialDelayMs: 180_000 },
+  { name: 'notify:saved-searches', intervalMs: 6 * HOUR, initialDelayMs: 150_000 },
   { name: 'notify:followed-companies', intervalMs: 12 * HOUR, initialDelayMs: 240_000 },
   { name: 'notify:follow-ups', intervalMs: 12 * HOUR, initialDelayMs: 300_000 },
 ];

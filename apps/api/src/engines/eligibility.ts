@@ -5,7 +5,9 @@ import {
   POSTGRADUATE_DEGREES,
   type Degree,
   type EligibilityCheckDto,
+  type EligibilityGapDto,
   type EligibilitySummaryDto,
+  type ProfileFieldKey,
   type EligibilityVerdict,
 } from '@odp/shared';
 import type { OpportunitySnapshot, ProfileSnapshot } from './types';
@@ -28,7 +30,17 @@ const check = (
   label: string,
   passed: boolean | null,
   message: string,
-): EligibilityCheckDto => ({ key, label, passed, message });
+  extra: { gap?: EligibilityGapDto; resolvedBy?: ProfileFieldKey } = {},
+): EligibilityCheckDto => ({ key, label, passed, message, ...extra });
+
+/** A measurable shortfall, e.g. 0.2 CGPA short of the published minimum. */
+const gap = (
+  required: string,
+  actual: string,
+  shortfall: number | null,
+  unit: string | null,
+  closable: boolean,
+): EligibilityGapDto => ({ required, actual, shortfall, unit, closable });
 
 /** Does the user's degree satisfy one of the accepted degrees? */
 export function degreeSatisfies(userDegree: Degree, accepted: Degree[]): boolean {
@@ -124,7 +136,8 @@ export function evaluateEligibility(
     const accepted = criteria.degrees.map((d) => DEGREE_LABELS[d]).join(', ');
     if (!education) {
       unknown.push(
-        check('degree', 'Degree', null, `Posting accepts ${accepted}. Add your education to check this.`),
+        check('degree', 'Degree', null, `Posting accepts ${accepted}. Add your education to check this.`,
+          { resolvedBy: 'education.degree' }),
       );
     } else if (profile.education.some((e) => degreeSatisfies(e.degree, criteria.degrees))) {
       const matched = profile.education.find((e) => degreeSatisfies(e.degree, criteria.degrees))!;
@@ -136,6 +149,8 @@ export function evaluateEligibility(
           'Degree',
           false,
           `This posting accepts ${accepted}; your qualification is ${DEGREE_LABELS[education.degree]}.`,
+          // A degree is not something a candidate can change for one posting.
+          { gap: gap(accepted, DEGREE_LABELS[education.degree], null, null, false) },
         ),
       );
     }
@@ -147,14 +162,16 @@ export function evaluateEligibility(
     const userBranches = profile.education.map((e) => e.branch).filter((b): b is string => Boolean(b));
     if (userBranches.length === 0) {
       unknown.push(
-        check('branch', 'Branch', null, `Posting accepts ${accepted}. Add your branch to check this.`),
+        check('branch', 'Branch', null, `Posting accepts ${accepted}. Add your branch to check this.`,
+          { resolvedBy: 'education.branch' }),
       );
     } else if (userBranches.some((b) => branchSatisfies(b, criteria.branches))) {
       const matched = userBranches.find((b) => branchSatisfies(b, criteria.branches))!;
       passed.push(check('branch', 'Branch', true, `${matched} accepted`));
     } else {
       failed.push(
-        check('branch', 'Branch', false, `This posting accepts ${accepted}; your branch is ${userBranches[0]}.`),
+        check('branch', 'Branch', false, `This posting accepts ${accepted}; your branch is ${userBranches[0]}.`,
+          { gap: gap(accepted, userBranches[0], null, null, false) }),
       );
     }
   }
@@ -165,7 +182,8 @@ export function evaluateEligibility(
     const years = profile.education.map((e) => e.graduationYear).filter((y): y is number => y != null);
     if (years.length === 0) {
       unknown.push(
-        check('graduationYear', 'Graduation Year', null, `Posting is for the ${accepted} batch. Add your graduation year.`),
+        check('graduationYear', 'Graduation Year', null, `Posting is for the ${accepted} batch. Add your graduation year.`,
+          { resolvedBy: 'education.graduationYear' }),
       );
     } else if (years.some((y) => criteria.graduationYears.includes(y))) {
       const matched = years.find((y) => criteria.graduationYears.includes(y))!;
@@ -177,6 +195,17 @@ export function evaluateEligibility(
           'Graduation Year',
           false,
           `This posting is for the ${accepted} batch; you graduate in ${years[0]}.`,
+          {
+            // Years away from the accepted batch: a positive number means the
+            // posting is for an earlier batch than the candidate's.
+            gap: gap(
+              `${accepted} batch`,
+              `${years[0]}`,
+              Math.min(...criteria.graduationYears.map((y) => Math.abs(y - years[0]))),
+              'years',
+              false,
+            ),
+          },
         ),
       );
     }
@@ -193,7 +222,16 @@ export function evaluateEligibility(
         passed.push(check('cgpa', 'CGPA', true, `CGPA requirement satisfied (${best} ≥ ${criteria.minCgpa})`));
       } else {
         failed.push(
-          check('cgpa', 'CGPA', false, `Requires a minimum CGPA of ${criteria.minCgpa}; your CGPA is ${best}.`),
+          check('cgpa', 'CGPA', false, `Requires a minimum CGPA of ${criteria.minCgpa}; your CGPA is ${best}.`,
+            {
+              gap: gap(
+                `${criteria.minCgpa} CGPA`,
+                `${best} CGPA`,
+                Number((criteria.minCgpa - best).toFixed(2)),
+                'CGPA',
+                true,
+              ),
+            }),
         );
       }
     } else if (percentages.length > 0) {
@@ -211,12 +249,14 @@ export function evaluateEligibility(
             'CGPA',
             null,
             `Requires a minimum CGPA of ${criteria.minCgpa}. You recorded ${best}% — add your CGPA for an exact check.`,
+            { resolvedBy: 'education.cgpa' },
           ),
         );
       }
     } else {
       unknown.push(
-        check('cgpa', 'CGPA', null, `Requires a minimum CGPA of ${criteria.minCgpa}. Add your CGPA to check this.`),
+        check('cgpa', 'CGPA', null, `Requires a minimum CGPA of ${criteria.minCgpa}. Add your CGPA to check this.`,
+          { resolvedBy: 'education.cgpa' }),
       );
     }
   }
@@ -230,6 +270,7 @@ export function evaluateEligibility(
           'Percentage',
           null,
           `Requires a minimum of ${criteria.minPercentage}%. Add your percentage to check this.`,
+          { resolvedBy: 'education.percentage' },
         ),
       );
     } else {
@@ -238,7 +279,16 @@ export function evaluateEligibility(
         passed.push(check('percentage', 'Percentage', true, `${best}% meets the ${criteria.minPercentage}% requirement`));
       } else {
         failed.push(
-          check('percentage', 'Percentage', false, `Requires ${criteria.minPercentage}%; you recorded ${best}%.`),
+          check('percentage', 'Percentage', false, `Requires ${criteria.minPercentage}%; you recorded ${best}%.`,
+            {
+              gap: gap(
+                `${criteria.minPercentage}%`,
+                `${best}%`,
+                Number((criteria.minPercentage - best).toFixed(2)),
+                '%',
+                true,
+              ),
+            }),
         );
       }
     }
@@ -254,6 +304,7 @@ export function evaluateEligibility(
           'Backlogs',
           null,
           `Allows at most ${criteria.maxBacklogs} backlog(s). Add your backlog count to check this.`,
+          { resolvedBy: 'education.backlogs' },
         ),
       );
     } else {
@@ -269,7 +320,16 @@ export function evaluateEligibility(
         );
       } else {
         failed.push(
-          check('backlogs', 'Backlogs', false, `Allows at most ${criteria.maxBacklogs}; you have ${worst}.`),
+          check('backlogs', 'Backlogs', false, `Allows at most ${criteria.maxBacklogs}; you have ${worst}.`,
+            {
+              gap: gap(
+                `at most ${criteria.maxBacklogs}`,
+                `${worst}`,
+                worst - criteria.maxBacklogs,
+                'backlogs',
+                true,
+              ),
+            }),
         );
       }
     }
@@ -291,7 +351,16 @@ export function evaluateEligibility(
       passed.push(check('experience', 'Experience', true, label));
     } else if (!meetsMin) {
       failed.push(
-        check('experience', 'Experience', false, `Requires at least ${minExp} year(s); you have ${years}.`),
+        check('experience', 'Experience', false, `Requires at least ${minExp} year(s); you have ${years}.`,
+          {
+            gap: gap(
+              `${minExp} year(s)`,
+              `${years} year(s)`,
+              Number(((minExp as number) - years).toFixed(1)),
+              'years',
+              true,
+            ),
+          }),
       );
     } else {
       // Over-qualified is a caution, not a hard rejection — many employers still consider.
@@ -315,6 +384,7 @@ export function evaluateEligibility(
           'Age',
           null,
           `Age limit applies (${criteria.minAge ?? 'any'}–${criteria.maxAge ?? 'any'}). Add your date of birth to check this.`,
+          { resolvedBy: 'profile.dateOfBirth' },
         ),
       );
     } else {
@@ -330,6 +400,19 @@ export function evaluateEligibility(
             'Age',
             false,
             `Age limit is ${criteria.minAge ?? 'any'}–${criteria.maxAge ?? 'any'}; you are ${age}.`,
+            {
+              gap: gap(
+                `${criteria.minAge ?? 'any'}–${criteria.maxAge ?? 'any'} years`,
+                `${age} years`,
+                criteria.minAge != null && age < criteria.minAge
+                  ? criteria.minAge - age
+                  : criteria.maxAge != null
+                    ? age - criteria.maxAge
+                    : null,
+                'years',
+                false,
+              ),
+            },
           ),
         );
       }
@@ -341,7 +424,8 @@ export function evaluateEligibility(
     const required = criteria.citizenship.toLowerCase();
     if (!profile.country) {
       unknown.push(
-        check('citizenship', 'Citizenship', null, `Requires ${criteria.citizenship} citizenship. Add your country to check this.`),
+        check('citizenship', 'Citizenship', null, `Requires ${criteria.citizenship} citizenship. Add your country to check this.`,
+          { resolvedBy: 'profile.country' }),
       );
     } else if (profile.country.toLowerCase().includes(required) || required.includes(profile.country.toLowerCase())) {
       passed.push(check('citizenship', 'Citizenship', true, `${criteria.citizenship} citizenship requirement noted`));

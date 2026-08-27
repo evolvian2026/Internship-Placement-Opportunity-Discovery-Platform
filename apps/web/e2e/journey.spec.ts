@@ -180,3 +180,88 @@ test.describe('accessibility and responsiveness', () => {
     await expect(page.locator('h1')).toHaveCount(1);
   });
 });
+
+test.describe('insights and alerts', () => {
+  const password = 'Password1';
+
+  /** A signed-in user with a profile that is deliberately incomplete. */
+  async function signUpWithGaps(page: import('@playwright/test').Page): Promise<void> {
+    await page.goto('/register');
+    await page.getByLabel('Full name').fill('Insight Tester');
+    await page.getByLabel('Email').fill(`insight-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`);
+    await page.getByLabel('Password').fill(password);
+    await page.getByRole('button', { name: /create account/i }).click();
+    await expect(page).toHaveURL(/\/onboarding/, { timeout: 20_000 });
+
+    // Leave percentage and date of birth blank on purpose — that is what the
+    // unlock prompt is meant to notice.
+    await page.getByLabel('Branch / specialisation').fill('CSE');
+    await page.getByLabel('CGPA (out of 10)').fill('6.4');
+    await page.getByRole('button', { name: /continue/i }).click();
+    await page.getByRole('button', { name: 'Python', exact: true }).click();
+    await page.getByRole('button', { name: /continue/i }).click();
+    await page.getByLabel('Your city').fill('Pune');
+    await page.getByRole('button', { name: /finish setup/i }).click();
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 });
+  }
+
+  test('the dashboard names the field blocking the most opportunities', async ({ page }) => {
+    await signUpWithGaps(page);
+
+    const unlock = page.getByText(/Unlock a definite answer/i);
+    await expect(unlock).toBeVisible({ timeout: 20_000 });
+    // The payoff has to be quantified, otherwise it is just another nag.
+    await expect(page.getByText(/\d+ blocked/).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /add it/i }).first()).toBeVisible();
+  });
+
+  test('near misses explain the exact gap', async ({ page }) => {
+    await signUpWithGaps(page);
+    await page.goto('/near-misses');
+
+    await expect(page.getByRole('heading', { name: /near misses/i })).toBeVisible();
+    // Either there are groups with a measured gap, or an honest empty state.
+    const gap = page.getByText(/short by/i).first();
+    const empty = page.getByText(/Nothing close enough/i);
+    await expect(gap.or(empty)).toBeVisible({ timeout: 20_000 });
+  });
+
+  test('a search can be turned into an alert and then managed', async ({ page }) => {
+    await signUpWithGaps(page);
+
+    await page.goto('/opportunities?types=GOVERNMENT_JOB');
+    await expect(page.locator('article').first()).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole('button', { name: /alert me/i }).click();
+    await page.getByLabel('Name this alert').fill(`Gov watch ${Date.now()}`);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText(/alert created/i)).toBeVisible({ timeout: 15_000 });
+
+    await page.goto('/alerts');
+    await expect(page.getByRole('heading', { name: 'Alerts', exact: true })).toBeVisible();
+    await expect(page.getByText(/Alerts on/i).first()).toBeVisible();
+
+    // The saved search must run and return the same kind of results.
+    await page.getByRole('link', { name: /view \d+ match/i }).first().click();
+    await expect(page).toHaveURL(/\/alerts\/[a-z0-9-]+$/, { timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /saved search results/i })).toBeVisible();
+  });
+
+  test('an alert can be paused and deleted', async ({ page }) => {
+    await signUpWithGaps(page);
+    await page.goto('/opportunities?types=INTERNSHIP');
+    await expect(page.locator('article').first()).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole('button', { name: /alert me/i }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText(/alert created/i)).toBeVisible({ timeout: 15_000 });
+
+    await page.goto('/alerts');
+    const toggle = page.getByRole('checkbox', { name: /alerts enabled/i }).first();
+    await toggle.click();
+    await expect(page.getByText('Paused').first()).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('button', { name: /delete/i }).first().click();
+    await expect(page.getByText(/No alerts yet/i)).toBeVisible({ timeout: 15_000 });
+  });
+});

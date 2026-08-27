@@ -54,6 +54,7 @@ function toDto(row: {
 /** Maps a notification type onto the preference flag that governs it. */
 function isTypeEnabled(prefs: {
   newMatches: boolean;
+  savedSearches: boolean;
   deadlineReminders: boolean;
   followedCompanies: boolean;
   applicationFollowUps: boolean;
@@ -62,6 +63,8 @@ function isTypeEnabled(prefs: {
   switch (type) {
     case 'NEW_MATCHES':
       return prefs.newMatches;
+    case 'SAVED_SEARCH':
+      return prefs.savedSearches;
     case 'DEADLINE_REMINDER':
       return prefs.deadlineReminders;
     case 'FOLLOWED_COMPANY':
@@ -187,6 +190,7 @@ export async function getPreferences(userId: string): Promise<NotificationPrefer
     browserEnabled: prefs.browserEnabled,
     frequency: prefs.frequency,
     newMatches: prefs.newMatches,
+    savedSearches: prefs.savedSearches,
     deadlineReminders: prefs.deadlineReminders,
     followedCompanies: prefs.followedCompanies,
     applicationFollowUps: prefs.applicationFollowUps,

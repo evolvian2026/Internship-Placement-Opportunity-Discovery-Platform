@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from './AuthProvider';
 import { OpportunityCard, OpportunityCardSkeleton } from './OpportunityCard';
 import { Badge, Button, EmptyState, ErrorState } from './ui';
+import { SaveSearchButton } from './SaveSearchButton';
 
 /**
  * The search + filter surface (requirements 14, 15).
@@ -360,11 +361,20 @@ export function OpportunityBrowser({ module, title, description, lockedFilters, 
             shrink below its content, which pushed long titles and URLs past
             the viewport on narrow screens. */}
         <div className="min-w-0">
-          <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted" aria-live="polite">
               {loading ? 'Searching…' : `${data?.total.toLocaleString('en-IN') ?? 0} opportunities`}
             </p>
-            {activeFilterCount > 0 && <Badge tone="brand">{activeFilterCount} filters</Badge>}
+            <div className="flex items-center gap-2">
+              {activeFilterCount > 0 && <Badge tone="brand">{activeFilterCount} filters</Badge>}
+              {user && (
+                <SaveSearchButton
+                  query={filters.q ?? null}
+                  filters={{ ...filters, ...lockedFilters, page: undefined, pageSize: undefined }}
+                  disabled={loading}
+                />
+              )}
+            </div>
           </div>
 
           {error ? (

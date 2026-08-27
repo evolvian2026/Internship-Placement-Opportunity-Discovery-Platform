@@ -39,10 +39,12 @@ const DISCOVER_LINKS = [
   { href: '/psu-jobs', label: 'PSU' },
   { href: '/companies', label: 'Companies' },
   { href: '/deadlines', label: 'Deadlines' },
+  { href: '/alerts', label: 'Alerts' },
 ];
 
 const TOOLS_LINKS = [
   { href: '/assistant', label: 'AI Career Assistant' },
+  { href: '/near-misses', label: 'Near Misses' },
   { href: '/skills', label: 'Skill Gap Analysis' },
   { href: '/readiness', label: 'Career Readiness' },
   { href: '/profile', label: 'Profile & Resume' },

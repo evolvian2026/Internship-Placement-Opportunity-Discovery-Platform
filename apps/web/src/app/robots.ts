@@ -11,7 +11,7 @@ export default function robots(): MetadataRoute.Robots {
       disallow: [
         '/api/', '/admin', '/dashboard', '/profile', '/applications',
         '/saved', '/notifications', '/assistant', '/onboarding',
-        '/skills', '/readiness', '/recommended',
+        '/skills', '/readiness', '/recommended', '/alerts', '/near-misses',
       ],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,

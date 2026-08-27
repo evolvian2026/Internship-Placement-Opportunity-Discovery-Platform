@@ -65,6 +65,10 @@ export async function registerRepeatableJobs(): Promise<void> {
     // Daily digests, staggered so they do not contend.
     { name: 'notify:deadlines', cron: '30 3 * * *' },
     { name: 'notify:new-matches', cron: '0 4 * * *' },
+    // Saved-search alerts run more often than the daily digest: government
+    // notification windows are short, and the per-search frequency setting
+    // decides who actually gets told on any given pass.
+    { name: 'notify:saved-searches', cron: '0 */6 * * *' },
     { name: 'notify:followed-companies', cron: '30 4 * * *' },
     { name: 'notify:follow-ups', cron: '0 5 * * *' },
   ];

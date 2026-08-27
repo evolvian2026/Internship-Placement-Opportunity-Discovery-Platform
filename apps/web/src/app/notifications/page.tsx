@@ -18,6 +18,7 @@ export default function NotificationsPage() {
 
 const PREFERENCE_ROWS: { key: keyof NotificationPreferencesDto; label: string; hint: string }[] = [
   { key: 'newMatches', label: 'New matches', hint: 'A digest of opportunities matching your profile' },
+  { key: 'savedSearches', label: 'Saved-search alerts', hint: 'When something new matches a search you are watching' },
   { key: 'deadlineReminders', label: 'Deadline reminders', hint: 'Before a saved or tracked opportunity closes' },
   { key: 'followedCompanies', label: 'Followed companies', hint: 'When a company you follow posts something new' },
   { key: 'applicationFollowUps', label: 'Application follow-ups', hint: 'When a follow-up you scheduled is due' },

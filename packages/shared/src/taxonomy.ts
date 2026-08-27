@@ -250,6 +250,7 @@ export type EligibilityVerdict = (typeof ELIGIBILITY_VERDICTS)[number];
 
 export const NOTIFICATION_TYPES = [
   'NEW_MATCHES',
+  'SAVED_SEARCH',
   'DEADLINE_REMINDER',
   'FOLLOWED_COMPANY',
   'APPLICATION_FOLLOW_UP',
