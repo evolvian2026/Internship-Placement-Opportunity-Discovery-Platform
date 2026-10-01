@@ -1,11 +1,12 @@
 # ---------------------------------------------------------------------------
 # Full local stack: Postgres, Redis, API, background worker and the web app.
 #
-#   cp .env.docker.example .env
-#   docker compose up --build
-#   docker compose exec api npm run db:push
-#   docker compose exec api npm run db:seed:prod
-#   docker compose exec api npm run ingest:prod
+#   cp .env.docker.example .env      # then generate the two JWT secrets
+#   docker compose up --build        # schema, seed and sample data load themselves
+#
+# Postgres and Redis are published on 5433 and 6380 by default so they cannot
+# collide with an installation already running on the standard ports, and only
+# on the loopback interface. Inside the network they are still 5432 and 6379.
 # ---------------------------------------------------------------------------
 name: opportunity-discovery
 
@@ -20,7 +21,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '127.0.0.1:${POSTGRES_PORT:-5433}:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-opportunities}']
       interval: 10s
@@ -35,12 +36,43 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - '${REDIS_PORT:-6379}:6379'
+      - '127.0.0.1:${REDIS_PORT:-6380}:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 3s
       retries: 5
+
+  # Applies the schema, seeds the reference data and loads the sample
+  # catalogue, then exits. Every step is idempotent, so this runs safely on
+  # each `up`; the API waits for it rather than starting against an empty
+  # database and failing every request until someone runs it by hand.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: 'no'
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-opportunities}?schema=public
+      # The schema tools do not need the queue, and the secrets are only
+      # validated because the shared config module loads them.
+      REDIS_URL: ''
+      QUEUE_ENABLED: 'false'
+      INGESTION_ENABLED: 'false'
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      DATA_SOURCE: ${DATA_SOURCE:-mock}
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        npx prisma db push --schema prisma/schema.prisma --skip-generate
+        node dist/prisma/seed.js
+        node dist/prisma/ingest.js
 
   api:
     build:
@@ -50,6 +82,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -70,6 +103,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Opportunity Discovery <no-reply@example.com>}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ASSISTANT_MODEL: ${ASSISTANT_MODEL:-claude-sonnet-5}
     volumes:
@@ -82,10 +116,12 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    # Only the datastores and the prepared schema — the worker runs
+    # independently of the API process and must not wait on it.
     depends_on:
-      api: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
     # Same image as the API, different entrypoint: source connectors, the
     # freshness sweep and notification digests run off the request path.
     command: ['node', 'dist/src/worker.js']
@@ -94,14 +130,20 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-opportunities}?schema=public
       REDIS_URL: redis://redis:6379
       QUEUE_ENABLED: 'true'
+      DATABASE_CONNECTION_LIMIT: ${DATABASE_CONNECTION_LIMIT:-25}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:3000}
+      # Deadline reminders and saved-search alerts link back to the site.
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       DATA_SOURCE: ${DATA_SOURCE:-mock}
       INGESTION_ENABLED: 'true'
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
       STORAGE_LOCAL_DIR: /app/apps/api/storage
       SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-Opportunity Discovery <no-reply@example.com>}
     volumes:
       - resume-storage:/app/apps/api/storage
@@ -115,7 +157,7 @@ services:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
     restart: unless-stopped
     depends_on:
-      api: { condition: service_started }
+      api: { condition: service_healthy }
     environment:
       NODE_ENV: production
       # Server components talk to the API over the compose network.

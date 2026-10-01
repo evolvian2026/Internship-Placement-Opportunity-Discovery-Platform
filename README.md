@@ -24,13 +24,23 @@ cp .env.docker.example .env
 sed -i "s|^JWT_ACCESS_SECRET=.*|JWT_ACCESS_SECRET=$(openssl rand -hex 48)|" .env
 sed -i "s|^JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=$(openssl rand -hex 48)|" .env
 
-docker compose up --build -d
-docker compose exec api npx prisma db push
-docker compose exec api npm run db:seed
-docker compose exec api npm run ingest      # loads sample opportunities
+docker compose up --build
 ```
 
 Open <http://localhost:3000>.
+
+A one-shot `migrate` service applies the schema, seeds the reference data and
+loads the sample catalogue before the API starts, so there is nothing to run by
+hand. Every step is idempotent and repeats safely on each `up`.
+
+Postgres and Redis are published on **5433** and **6380** on the loopback
+interface, so they do not collide with anything already installed locally.
+Inside the compose network they are still `postgres:5432` and `redis:6379`.
+
+`NEXT_PUBLIC_API_BASE_URL` is compiled into the browser bundle when the web
+image is built, so it has to be a URL the visitor's browser can reach. Deploying
+anywhere other than localhost means rebuilding the web image with the public API
+URL — a restart is not enough.
 
 ### Option B — Local development
 
@@ -321,6 +331,7 @@ Designed for 100k+ users and 1M+ opportunities:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — subsystem design and data flow
 - [`docs/API.md`](docs/API.md) — endpoint reference
 - [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md) — access policy and connector guide
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — deploying it, including a free stack for a public demo
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — what was built, and what extends cleanly
 
 ---
