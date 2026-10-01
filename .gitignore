@@ -20,3 +20,6 @@ test-results/
 .cache/
 prisma/*.db
 .env.docker
+
+# Redis snapshot, written into the working directory by a local redis-server
+dump.rdb
